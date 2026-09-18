@@ -3,7 +3,6 @@
 (function () {
   'use strict';
 
-  var TOKEN_KEY = 'localdeck_token';
   var VIEW_KEY = 'pw_view_mode';
 
   // 模块一（本机资产清单）已经不再是内核的一部分，它住在 modules/inventory/，
@@ -31,50 +30,120 @@
     view: localStorage.getItem(VIEW_KEY) === 'table' ? 'table' : 'grid'
   };
 
-  /* ------------------------------------------------------------ 令牌 */
-  // 令牌从 URL 读一次就存进 sessionStorage 并把 URL 里的痕迹抹掉，
-  // 避免用户把带令牌的地址复制给别人（虽然对方也访问不到）。
-  function readToken() {
+  /* ------------------------------------------------------------ 令牌与会话 */
+  // 令牌只从地址栏读一次 —— 入口地址（start.bat 打印的那条）里带着它。
+  // **刻意不写进 localStorage / sessionStorage**：换到会话之后就不需要它了，
+  // 留着只是多一份明文凭据躺在浏览器里。地址栏里的痕迹也当场抹掉。
+  function readEntryToken() {
     var params = new URLSearchParams(location.search);
-    var fromUrl = params.get('token');
+    var fromUrl = params.get('token') || '';
     if (fromUrl) {
-      sessionStorage.setItem(TOKEN_KEY, fromUrl);
       params.delete('token');
       var qs = params.toString();
-      history.replaceState(null, '', location.pathname + (qs ? '?' + qs : ''));
-      return fromUrl;
+      history.replaceState(null, '', location.pathname + (qs ? '?' + qs : '') + location.hash);
     }
-    return sessionStorage.getItem(TOKEN_KEY) || '';
+    return fromUrl;
   }
 
-  var TOKEN = readToken();
+  // 这次打开手里握着的令牌：可能是入口地址给的，也可能是登录门上刚粘的。
+  // 会话建立之后它就没用了，但留着无害 —— 万一 Cookie 被浏览器清掉，
+  // 同一个页面还能凭它再换一次会话，不用重新找。
+  var TOKEN = readEntryToken();
 
-  /* ------------------------------------------------------------ 令牌失效 */
-  // 令牌不对时，页面外壳照常渲染，但**所有接口都 401** —— 这个状态极容易
-  // 被误解成"模块坏了"：原来的表现就是一条 3 秒就消失的红条
-  // （「读取模块列表失败：缺少或错误的访问令牌」）+ 一个空空的模块列表。
-  //
-  // 所以这里做两件事：
-  //   1. 竖起一条**常驻**提示，把"发生了什么 / 为什么 / 怎么恢复"说清楚
-  //   2. **停掉模块轮询** —— 否则它每几秒就触发一次同样的错，越看越糊涂
-  var tokenProblem = false;
+  // 用户很可能把整条访问地址直接粘进来，所以要先从里面把令牌认出来。
+  function extractToken(text) {
+    var value = String(text || '').trim();
+    if (!value) return '';
+    var match = value.match(/[?&]token=([^&\s]+)/);
+    return match ? decodeURIComponent(match[1]) : value;
+  }
 
-  function flagTokenProblem() {
-    if (tokenProblem) return;
-    tokenProblem = true;
-    var box = $('token-problem');
-    if (box) box.hidden = false;
-    if (state.moduleTimer) {
-      clearInterval(state.moduleTimer);
-      state.moduleTimer = null;
+  /* ------------------------------------------------------------ 登录门 */
+  // 会话失效时把门推出来。**为什么不是留一条常驻红字**：接口 401 时页面外壳
+  // 照常渲染、只是数据全空，看着像"模块坏了"；而且红字只能看、不能做任何事。
+  // 门推出来，输一次就恢复了 —— 这也是它替换掉原来那块提示的原因。
+  var loginRequired = false;
+
+  function setLoginError(message) {
+    var box = $('login-error');
+    if (!box) return;
+    box.textContent = message || '';
+    box.hidden = !message;
+  }
+
+  function showLoginGate(message) {
+    var gate = $('login-gate');
+    if (!gate) return;
+    if (!loginRequired) {
+      loginRequired = true;
+      // 停掉模块轮询：会话都没了，它每几秒试一次只会把日志刷满
+      if (state.moduleTimer) {
+        clearInterval(state.moduleTimer);
+        state.moduleTimer = null;
+      }
+      var input = $('login-token');
+      if (input) {
+        input.value = '';
+        input.focus();
+      }
     }
+    gate.hidden = false;
+    // 只有调用方明确给了原因才覆盖 —— 否则会把用户输错时的提示冲掉
+    if (message) setLoginError(message);
+  }
+
+  function hideLoginGate() {
+    loginRequired = false;
+    var gate = $('login-gate');
+    if (gate) gate.hidden = true;
+    setLoginError('');
+  }
+
+  /* ------------------------------------------------------------ 会话接口 */
+  function checkSession() {
+    return fetch('/api/session', { cache: 'no-store' }).then(function (res) {
+      return res.json().catch(function () {
+        return {};
+      });
+    });
+  }
+
+  function submitSession(token) {
+    return fetch('/api/session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: token })
+    }).then(function (res) {
+      return res
+        .json()
+        .catch(function () {
+          return {};
+        })
+        .then(function (data) {
+          if (!res.ok) throw new Error((data && data.detail) || '令牌不对');
+          return data;
+        });
+    });
+  }
+
+  function logout() {
+    // 先请求再刷新：即使请求失败也照样刷新，本地 Cookie 由服务端的
+    // Set-Cookie 清掉；万一服务没起来，刷新至少让用户回到登录门。
+    fetch('/api/session', { method: 'DELETE' })
+      .catch(function () {})
+      .then(function () {
+        TOKEN = '';
+        location.reload();
+      });
   }
 
   /* ------------------------------------------------------------ 请求 */
   function api(path, options) {
     var opts = options || {};
     var headers = Object.assign({}, opts.headers || {});
-    headers['X-LocalDeck-Token'] = TOKEN;
+    // 会话正常时压根用不上它；带上只是为了「Cookie 被清掉」这种场景
+    // 能在同一次打开里自愈。有就带，没有就不带。
+    if (TOKEN) headers['X-LocalDeck-Token'] = TOKEN;
     if (opts.body) headers['Content-Type'] = 'application/json';
     return fetch(path, Object.assign({}, opts, { headers: headers })).then(function (res) {
       return res
@@ -84,9 +153,13 @@
         })
         .then(function (data) {
           if (!res.ok) {
-            // 401 = 令牌不对。这不只是"这一次请求失败" —— 它意味着后面每个
-            // 接口都会失败，所以竖常驻提示，而不是让调用方弹一条就走。
-            if (res.status === 401) flagTokenProblem();
+            // 401 = 没进门。这不止是"这一次请求失败"，后面每个接口都会失败，
+            // 所以直接把登录门推出来，而不是让调用方弹一条 toast 就走。
+            // 登录接口自己的 401 要放过 —— 那时门已经开着，服务端给的
+            // 「令牌不对」比这里的通用文案准确得多。
+            if (res.status === 401 && path.indexOf('/api/session') !== 0) {
+              showLoginGate();
+            }
             throw new Error((data && data.detail) || '请求失败（HTTP ' + res.status + '）');
           }
           return data;
@@ -152,9 +225,9 @@
 
   var toastTimer = null;
   function toast(message, isError) {
-    // 令牌问题已经由常驻提示说明清楚了，这里别再插一条 3 秒就消失的红条 ——
-    // 模块轮询会每几秒触发一次，弹起来只会让人以为"一直在坏、不知道怎么办"。
-    if (isError && tokenProblem) return;
+    // 登录门已经说明情况了，这里别再插一条 3 秒就消失的红条 ——
+    // 模块轮询每几秒触发一次，连弹只会让人以为"一直在坏、不知道怎么办"。
+    if (isError && loginRequired) return;
     var el = $('toast');
     el.textContent = message;
     el.classList.toggle('is-error', !!isError);
@@ -1112,6 +1185,43 @@
     }
   }
 
+  /* ------------------------------------------------------------ 登录门绑定 */
+  // 单独拎出来，是因为它必须在 boot() 的一开始就绑好 —— 那时 startApp()
+  // 可能还没跑过（没登录），但门已经推出来了，里面的按钮必须是活的。
+  function bindLogin() {
+    var form = $('login-form');
+    if (form) {
+      form.addEventListener('submit', function (event) {
+        event.preventDefault();
+        var value = extractToken($('login-token').value);
+        if (!value) {
+          setLoginError('先粘贴令牌，或者把整条访问地址粘进来。');
+          return;
+        }
+        var button = $('login-submit');
+        button.disabled = true;
+        button.textContent = '验证中…';
+        submitSession(value)
+          .then(function () {
+            TOKEN = value;
+            hideLoginGate();
+            // 从这儿重来一遍，让所有面板都去拉一次数据
+            startApp();
+          })
+          .catch(function (err) {
+            setLoginError(err.message + '。令牌在 start.bat 窗口打印的访问地址里。');
+          })
+          .then(function () {
+            button.disabled = false;
+            button.textContent = '进入';
+          });
+      });
+    }
+
+    var logoutBtn = $('btn-logout');
+    if (logoutBtn) logoutBtn.addEventListener('click', logout);
+  }
+
   /* ------------------------------------------------------------ 事件绑定 */
   function bind() {
     $('tabs').addEventListener('click', function (event) {
@@ -1320,18 +1430,18 @@
   }
 
   /* ------------------------------------------------------------ 启动 */
-  function boot() {
-    if (!TOKEN) {
-      document.body.innerHTML =
-        '<div style="padding:80px;text-align:center;font-family:sans-serif">' +
-        '<h2>缺少访问令牌</h2>' +
-        '<p style="color:#6a6a66">请从启动窗口里点开的链接进入，或重启服务后重新打开。</p></div>';
-      return;
+  // bind() 只该跑一次，但 startApp() 会在「登录成功后」再跑一遍 ——
+  // 所以把一次性的事情用这个标志隔开。重复 bind 会让每个按钮响应两次。
+  var bound = false;
+
+  function startApp() {
+    if (!bound) {
+      bound = true;
+      readUrlPrefs();
+      bind();
+      applyView();
+      gotoPanel(state.tab);
     }
-    readUrlPrefs();
-    bind();
-    applyView();
-    gotoPanel(state.tab);
     // 服务端已经把品牌注入首页了，这里只是把配置取回来供外观面板使用
     loadBranding().catch(function (err) {
       toast('读取外观配置失败：' + err.message, true);
@@ -1351,6 +1461,53 @@
       })
       .catch(function (err) {
         toast('读取模块列表失败：' + err.message, true);
+      });
+  }
+
+  function boot() {
+    if (!bound) {
+      // 登录门上的表单与退出按钮要**现在就**绑好 —— 下面可能直接把门推出来，
+      // 而那时 startApp() 还没跑过，按钮会是死的。
+      bindLogin();
+    }
+
+    // 三条路，按代价从低到高试：
+    //   1. 已经登录过  → 会话 Cookie 直接放行，什么都不用做
+    //   2. 入口地址带令牌 → 静默换一条会话，用户根本看不到登录门
+    //   3. 都没有      → 把门推出来
+    if (TOKEN) {
+      submitSession(TOKEN)
+        .then(function () {
+          hideLoginGate();
+          startApp();
+        })
+        .catch(function () {
+          // 手里的令牌是旧的（换过数据目录、删过 data/.token 之类）。
+          // 别急着报错 —— 先看看是不是已经有一条有效会话，有就照样进去。
+          checkSession().then(function (data) {
+            if (data.authenticated) {
+              TOKEN = '';
+              hideLoginGate();
+              startApp();
+            } else {
+              showLoginGate('地址里带的令牌已经失效，请粘贴当前那条。');
+            }
+          });
+        });
+      return;
+    }
+
+    checkSession()
+      .then(function (data) {
+        if (data.authenticated) {
+          hideLoginGate();
+          startApp();
+        } else {
+          showLoginGate();
+        }
+      })
+      .catch(function () {
+        showLoginGate('读取会话状态失败，请手动输入令牌。');
       });
   }
 

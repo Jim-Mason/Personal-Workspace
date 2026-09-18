@@ -3,34 +3,53 @@
 from __future__ import annotations
 
 import html
+import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, HTMLResponse, Response
 
 from . import config, db
 # 模块一的接口已经不在这里了 —— 它作为一个 native 模块住在
 # modules/inventory/，由 hub.mount_native() 挂到 /inventory 之下。
-from .controllers import modules as modules_api, system
+from .controllers import modules as modules_api, session as session_api, system
 from .controllers import branding as branding_api
+from .logging_setup import setup_logging
 from .security import install_security
-from .services import branding
+from .services import branding, session as sessions
 from .services.modules import ModuleHub
+
+log = logging.getLogger("localdeck")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     applied = db.run_migrations()
     if applied:
-        print(f"[{config.APP_ID}] 已应用迁移：{', '.join(applied)}")
+        log.info("已应用迁移：%s", ", ".join(applied))
+
+    # 过期会话顺手清一次。这是个单机服务，不值得为它上定时任务 ——
+    # 每次启动清一遍，永远不会有积压。
+    dropped = sessions.purge_expired()
+    if dropped:
+        log.info("清理了 %d 条过期会话", dropped)
+
     hub: ModuleHub = app.state.hub
     await hub.startup()
+    log.info(
+        "中台已就绪 —— 版本 %s，端口 %s，数据目录 %s，日志 %s",
+        config.APP_VERSION,
+        config.PORT,
+        config.DATA_DIR,
+        config.LOG_PATH,
+    )
     try:
         yield
     finally:
         # 必须先收模块再退出：中台是被 Ctrl+C 掉的，子进程若没人管就会
         # 留下来占着内部端口，下次启动直接变成「端口被占用」。
         await hub.shutdown()
+        log.info("中台已停止")
 
 
 def render_index() -> str:
@@ -49,13 +68,31 @@ def render_index() -> str:
         "mode": html.escape(data["mode"]),
         "bg_style": html.escape(data["bg_style"]),
         "version": html.escape(config.APP_VERSION),
+        # 登录门上要写「之后 N 天内不用再输」，N 从配置来，别在 HTML 里写死。
+        "session_ttl": str(config.SESSION_TTL_DAYS),
     }
     for key, value in slots.items():
         template = template.replace(f"{{{{{key}}}}}", value)
     return template.replace("<!--BRANDING_CSS-->", f"<style>{branding.to_css(data)}</style>")
 
 
+def _session_check(token: str):
+    """浏览器会话校验。
+
+    把令牌闭包进来，不每个请求都去读一次 `data/.token` ——
+    服务跑起来之后令牌不会再变，反复戳磁盘纯属浪费。
+    """
+
+    def check(request: Request) -> bool:
+        sid = request.cookies.get(config.SESSION_COOKIE) or ""
+        return sessions.verify(sid, token)
+
+    return check
+
+
 def create_app() -> FastAPI:
+    # 日志要第一个装：从这一行之后的每一句 log.xxx 才有地方去。
+    setup_logging()
     token = config.get_or_create_token()
     app = FastAPI(
         title=config.APP_NAME,
@@ -65,15 +102,23 @@ def create_app() -> FastAPI:
         redoc_url=None,
         openapi_url=None,
     )
+    # 会话控制器要用它比对令牌，放 state 上让控制器直接取。
+    app.state.token = token
 
     # ---- 模块中枢：必须在装安全中间件之前建好，安全层要用它的票据表
     hub = ModuleHub()
     app.state.hub = hub
     modules_api.bind(hub)
 
-    install_security(app, token, ticket_lookup=hub.ticket_lookup)
+    install_security(
+        app,
+        token,
+        ticket_lookup=hub.ticket_lookup,
+        session_verify=_session_check(token),
+    )
     app.include_router(system.router)
     app.include_router(branding_api.router)
+    app.include_router(session_api.router)
     app.include_router(modules_api.router)
 
     # native / static 模块的路由必须现在挂好，不能等到 lifespan ——

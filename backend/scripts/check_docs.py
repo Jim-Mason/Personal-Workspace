@@ -5,12 +5,17 @@
 跑法（在项目根目录下）：
     .venv\\Scripts\\python.exe backend\\scripts\\check_docs.py
 
+想核对的项目跑在非默认地址（比如隔离出来的第二个实例）时，把地址一并传进来，
+否则会去问默认的 8731 —— 那个实例若是旧进程，自检项数会整段对不上：
+    .venv\\Scripts\\python.exe backend\\scripts\\check_docs.py --base http://127.0.0.1:8741
+
 退出码 0 = 全部一致；1 = 有对不上的地方。
 中台没启动过时会**跳过自检项数核对**并给出提示（那些数字得实际跑一遍才拿得到）。
 """
 
 from __future__ import annotations
 
+import argparse
 import re
 import subprocess
 import sys
@@ -18,6 +23,14 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 DOCS = ["README.md", "docs/ARCHITECTURE.md", "docs/MODULES.md", "docs/RUNBOOK.md"]
+
+# 去问哪个实例要自检项数。默认就是中台自己的地址；要核对隔离实例时用 --base 指过去。
+_AP = argparse.ArgumentParser(add_help=True)
+_AP.add_argument("--base", default="http://127.0.0.1:8731", help="要核对的中台地址")
+_AP.add_argument("--data-dir", default="", help="实例的数据目录（用来读令牌）")
+ARGS, _ = _AP.parse_known_args()
+BASE = ARGS.base
+DATA_DIR = ARGS.data_dir
 
 ROWS: list[tuple[str, str, str, bool, str]] = []
 
@@ -48,12 +61,17 @@ native_specs = [s for s in ordered if s.kind in {"native", "static"}]
 # 自检项数只能实际跑一遍拿到，而那要求中台**跑过至少一次**（它得先有 data/.token）。
 # 新克隆下来的目录还没启动过，这时不该报"失败"，而该说清楚"跳过了、怎么补上"。
 NOTES: list[str] = []
-TOKEN_PATH = ROOT / "data" / ".token"
+TOKEN_PATH = (Path(DATA_DIR) / ".token") if DATA_DIR else (ROOT / "data" / ".token")
 counts: dict[str, int] = {}
 if TOKEN_PATH.exists():
     for mid in specs:
+        argv = [sys.executable, str(ROOT / "backend/scripts/check_modules.py"), "--module", mid]
+        if BASE != "http://127.0.0.1:8731":
+            argv += ["--base", BASE]
+        if DATA_DIR:
+            argv += ["--data-dir", DATA_DIR]
         out = subprocess.run(
-            [sys.executable, str(ROOT / "backend/scripts/check_modules.py"), "--module", mid],
+            argv,
             capture_output=True,
             text=True,
             encoding="utf-8",
@@ -61,6 +79,11 @@ if TOKEN_PATH.exists():
         ).stdout
         m = re.search(r"合计 (\d+) 项", out)
         counts[mid] = int(m.group(1)) if m else 0
+        if counts[mid] == 0:
+            NOTES.append(
+                f"模块 {mid} 跑不出项数 —— {BASE} 上那个实例可能是在它被创建之前启动的。"
+                "重启后再跑，或加 --base 指向新实例。"
+            )
 else:
     NOTES.append(
         "读不到 data/.token —— 中台还没启动过，**跳过自检项数核对**。"
@@ -145,11 +168,32 @@ if counts:
     for mid, n in counts.items():
         in_docs = re.findall(rf"{mid}\D{{0,12}}?(\d+)\s*项", all_md)
         for value in set(in_docs):
-            check("B 分模块自检", f"文档称 {mid} 为 {value} 项", f"实际 {n} 项", int(value) == n)
+            ok = int(value) == n
+            # 数出来的项数比文档少，**未必是文档写错了** ——
+            # 也可能是问错了对象：新加的模块在 8731 上那个实例里根本不存在
+            # （它是旧进程，模块发现发生在启动时）。报"文档错了"会把人带到
+            # 完全错误的方向去改文档，所以这里把这种情况单独说出来。
+            if not ok and n < int(value):
+                check(
+                    "B 分模块自检",
+                    f"文档称 {mid} 为 {value} 项",
+                    f"实际 {n} 项",
+                    False,
+                    f"数出来偏少 —— 先确认 {BASE} 上那个实例是在该模块创建**之后**启动的，"
+                    "否则重启中台 / 用 --base 指到新实例再跑，别急着改文档",
+                )
+            else:
+                check("B 分模块自检", f"文档称 {mid} 为 {value} 项", f"实际 {n} 项", ok)
 
 check("B 平台端口", "四份文档里的 8731", "应出现", all(PLATFORM_PORT in t for t in texts.values()))
-check("B 版本号", f"config.APP_VERSION = {VERSION}", "应与 README 的版本脉络一致",
-      VERSION.startswith("0.4"), f"README 称 v0.4，代码里是 {VERSION}")
+
+# 版本号：以「版本脉络」里最新那条为准，别再写死一个字面量 ——
+# 写死过一次，改版本时它就变成一条永远删不掉的假警报。
+_hist = re.findall(r"\*\*v(\d+\.\d+)\*\*", texts["README.md"])
+_latest = _hist[-1] if _hist else ""
+check("B 版本号", f"config.APP_VERSION = {VERSION}", "应与 README 版本脉络最新一条一致",
+      bool(_latest) and VERSION.startswith(_latest),
+      f"README 最新是 v{_latest or '(没找到)'}，代码里是 {VERSION}")
 
 # README 开头那行「当前版本：vX.Y」最容易忘 —— 它不在「版本脉络」里，
 # 改版本时十有八九会漏，而它就印在项目标题下面。

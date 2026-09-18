@@ -859,51 +859,103 @@ td.col-time { font-family: var(--mono); font-size: 12px; color: var(--text-2); w
 /* 令牌失效的常驻提示。
    刻意做成"盖住内容区"而不是像 toast 那样飘一条：它不是一次性反馈，
    而是一个挡住所有数据的状态 —— 消失掉反而会让人以为已经好了。 */
-.token-problem {
+/* ================================================================ 登录门 */
+/* z-index 要压过所有东西：抽屉(40)、模块运行区、弹窗(60)。
+   否则未登录时还能点到下面的按钮，而那些点击注定 401 —— 看着像坏了。 */
+.gate {
   position: fixed;
   inset: 0;
-  z-index: 70;
+  z-index: 90;
   display: grid;
   place-items: center;
   padding: 24px;
-  background: color-mix(in srgb, var(--bg) 78%, transparent);
-  -webkit-backdrop-filter: blur(6px);
-  backdrop-filter: blur(6px);
+  background: color-mix(in srgb, var(--bg) 80%, transparent);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
   animation: fade-in 0.24s ease both;
 }
 
-.token-problem-card {
-  width: min(620px, 92vw);
-  max-height: 86vh;
-  overflow: auto;
-  padding: 24px 26px;
+.gate-card {
+  width: min(430px, 92vw);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 30px 30px 22px;
   border-radius: var(--radius);
-  border: 1px solid color-mix(in srgb, #e5484d 40%, var(--border));
+  border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text);
   box-shadow: var(--shadow-2);
-  font-size: 13.5px;
-  line-height: 1.75;
 }
 
-.token-problem-card h2 {
-  margin: 0 0 12px;
+.gate-logo {
+  align-self: center;
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 15px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  color: #fff;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+.gate-title {
+  margin: 0;
+  text-align: center;
   font-size: 17px;
+}
+
+.gate-note {
+  margin: 0;
+  text-align: center;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text-2);
+}
+
+.gate-input {
+  width: 100%;
+  text-align: center;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+/* 服务端返回的失败原因是这个流程里唯一要读的一句话，给它足够的分量。 */
+.gate-error {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.6;
+  background: color-mix(in srgb, #e5484d 14%, transparent);
+  border: 1px solid color-mix(in srgb, #e5484d 34%, transparent);
   color: #e5484d;
 }
 
-.token-problem-card p { margin: 0 0 10px; }
-.token-problem-card ul { margin: 0 0 12px; padding-left: 20px; }
-.token-problem-card li { margin-bottom: 4px; }
-.token-problem-card code {
+.gate-submit { width: 100%; }
+
+.gate-foot {
+  margin: 0;
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--text-2);
+}
+
+.gate-foot-dim {
+  color: var(--text-3);
+  font-size: 11.5px;
+}
+
+.gate-foot code {
   padding: 1px 5px;
   border-radius: 4px;
   background: var(--surface-2);
   font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-  font-size: 12.5px;
+  font-size: 11.5px;
 }
-.token-problem-card em { font-style: normal; font-weight: 600; }
-.token-problem-card strong { font-weight: 600; }
 
 /* ================================================================ 外观抽屉 */
 .drawer-mask {

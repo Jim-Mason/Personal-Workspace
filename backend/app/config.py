@@ -10,7 +10,7 @@ from pathlib import Path
 # 对外品牌名只是「出厂默认值」，用户在界面里随时可改（存 meta 表）。
 # 真正的显示名以 branding 配置为准，这里这份只在配置为空时兜底。
 APP_NAME = "Personal Workspace"
-APP_VERSION = "0.4.0"
+APP_VERSION = "0.5.0"
 
 # 内部标识，不随品牌改名而变：
 # 令牌请求头 X-LocalDeck-Token、数据库文件名、目录名都用它。
@@ -39,6 +39,20 @@ RUNNERS_DIR = _APP_DIR / "services" / "modules" / "runners"
 DB_PATH = DATA_DIR / "localdeck.db"
 TOKEN_PATH = DATA_DIR / ".token"
 MACHINE_PATH = DATA_DIR / ".machine"
+
+# 运行日志。刻意放在 data/ 下 —— 「备份 = 拷一个 data 目录」这条约定
+# 不能因为多了日志就破功。日志也会跟着一起被拷走，这是好事：
+# 出问题时手上正好有现场。体积由轮转兜住，见 logging_setup.py。
+LOG_DIR = DATA_DIR / "logs"
+LOG_PATH = LOG_DIR / "localdeck.log"
+
+# 浏览器会话（Cookie）的有效期，单位天。只影响「页面关了再开要不要重输令牌」，
+# 不影响令牌本身 —— 令牌没有过期时间，它只在被删掉时失效。
+SESSION_TTL_DAYS = 30
+# 会话 Cookie 的名字。定义在这里是因为有两处要用它：
+# 安全层（读它判断能不能放行）和会话服务（发它、注销它）。
+# 各写一份是这类常量最容易出的错 —— 改了名字只改一处，表现是「登录成功但立刻又退出来」。
+SESSION_COOKIE = "pw_session"
 
 
 def ensure_dirs() -> None:

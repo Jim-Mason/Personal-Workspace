@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>日志可视化分析</title>
+    <!-- 占位符 {{MOUNT}} 由 logviz_api.page() 在返回时替换成真实挂载点。
+         写死路径的话，改个挂载点页面就整片 404，而且是「HTML 打得开、
+         CSS 拿不到」那种半死状态。 -->
+    <link rel="stylesheet" href="{{MOUNT}}/assets/view.css" />
+    <script>
+      window.__LV__ = { mount: "{{MOUNT}}" };
+    </script>
+  </head>
+  <body>
+    <header class="lv-top">
+      <div class="lv-brand">
+        <span class="lv-brand-mark">析</span>
+        <div>
+          <h1>日志可视化分析</h1>
+          <p>
+            日志读成报告 · 每个指标都能跳回原始行 ·
+            <strong>对日志文件全程只读</strong>
+          </p>
+        </div>
+      </div>
+      <div class="lv-top-actions">
+        <span class="lv-stat" id="lv-stat"></span>
+        <button type="button" class="lv-btn lv-btn-sm" id="lv-cache">缓存</button>
+      </div>
+    </header>
+
+    <div class="lv-body">
+      <!-- ---------------------------------------------------- 左栏：目录 -->
+      <aside class="lv-side">
+        <div class="lv-side-head">
+          <h2>日志目录</h2>
+          <button type="button" class="lv-btn lv-btn-sm" id="lv-add-toggle">+ 新增</button>
+        </div>
+
+        <form class="lv-add" id="lv-add" hidden>
+          <input
+            type="text"
+            id="lv-add-path"
+            placeholder="目录绝对路径，例如 D:\git_data\logs"
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <input type="text" id="lv-add-name" placeholder="给它起个名字（可留空）" autocomplete="off" />
+          <div class="lv-add-actions">
+            <button type="submit" class="lv-btn lv-btn-primary lv-btn-sm">登记</button>
+            <button type="button" class="lv-btn lv-btn-sm" id="lv-add-cancel">取消</button>
+          </div>
+          <p class="lv-hint" id="lv-add-msg"></p>
+        </form>
+
+        <ul class="lv-roots" id="lv-roots"></ul>
+
+        <div class="lv-side-foot">
+          <p>
+            移出名单只会取消登记，<strong>磁盘上的目录一个字都不会动</strong>。
+            可读范围仅限这里登记的目录。
+          </p>
+        </div>
+      </aside>
+
+      <!-- ---------------------------------------------------- 中栏：文件 -->
+      <section class="lv-files">
+        <nav class="lv-crumbs" id="lv-crumbs"></nav>
+        <div class="lv-files-toolbar">
+          <input
+            type="search"
+            id="lv-search"
+            class="lv-input"
+            placeholder="筛选文件名…（按回车）"
+            autocomplete="off"
+          />
+          <span class="lv-stat" id="lv-files-stat"></span>
+        </div>
+        <div class="lv-filelist" id="lv-filelist">
+          <p class="lv-empty">左边选一个日志目录，或先「+ 新增」登记一个。</p>
+        </div>
+      </section>
+
+      <!-- ---------------------------------------------------- 右栏：报告 -->
+      <main class="lv-report" id="lv-report">
+        <p class="lv-empty" id="lv-report-empty">
+          中间选一个文件，先认出它是什么日志，再出报告。
+        </p>
+      </main>
+    </div>
+
+    <!-- ---------------------------------------------------- 抽屉：下钻 -->
+    <div class="lv-drawer" id="lv-drawer" hidden>
+      <div class="lv-drawer-mask" id="lv-drawer-mask"></div>
+      <div class="lv-drawer-panel" role="dialog" aria-modal="true">
+        <header class="lv-drawer-head">
+          <div class="lv-drawer-title">
+            <h2 id="lv-drawer-name">原始行</h2>
+            <p id="lv-drawer-sub"></p>
+          </div>
+          <button type="button" class="lv-btn lv-btn-sm" id="lv-drawer-close">关闭</button>
+        </header>
+        <div class="lv-drawer-body" id="lv-drawer-body"></div>
+      </div>
+    </div>
+
+    <!-- ---------------------------------------------------- 模态：缓存 -->
+    <div class="lv-modal" id="lv-modal" hidden>
+      <div class="lv-modal-mask" id="lv-modal-mask"></div>
+      <div class="lv-modal-panel">
+        <h2>分析缓存</h2>
+        <div id="lv-modal-body"></div>
+        <div class="lv-modal-actions">
+          <button type="button" class="lv-btn" id="lv-modal-close">关闭</button>
+          <button type="button" class="lv-btn lv-btn-danger" id="lv-cache-clear">清空缓存</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="{{MOUNT}}/assets/view.js"></script>
+  </body>
+</html>

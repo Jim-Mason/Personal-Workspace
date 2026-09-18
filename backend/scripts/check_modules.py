@@ -25,7 +25,6 @@ from pathlib import Path
 from urllib.parse import quote
 
 ROOT = Path(__file__).resolve().parents[2]
-TOKEN_PATH = ROOT / "data" / ".token"
 
 PASS, FAIL, SKIP = "PASS", "FAIL", "SKIP"
 results: list[tuple[str, str, str]] = []
@@ -139,14 +138,20 @@ def main() -> int:
     parser.add_argument("--base", default="http://127.0.0.1:8731")
     parser.add_argument("--module", default="opsgen")
     parser.add_argument("--template", default="nginx", help="业务路径检查用的模板名")
+    parser.add_argument(
+        "--data-dir",
+        default=str(ROOT / "data"),
+        help="去哪读 .token。对着隔离实例（另一个端口 + 另一个数据目录）自检时要指到它的数据目录",
+    )
     args = parser.parse_args()
     base = args.base
     mid = args.module
+    token_path = Path(args.data_dir) / ".token"
 
-    if not TOKEN_PATH.exists():
-        print(f"读不到访问令牌：{TOKEN_PATH}（中台至少启动过一次才会生成）")
+    if not token_path.exists():
+        print(f"读不到访问令牌：{token_path}（中台至少启动过一次才会生成）")
         return 2
-    token = TOKEN_PATH.read_text(encoding="utf-8").strip()
+    token = token_path.read_text(encoding="utf-8").strip()
 
     print("=" * 68)
     print(f" 模块内核自检 —— {base} / 模块 {mid}")
@@ -623,11 +628,183 @@ def main() -> int:
                 else "有漏网的：" + "、".join(leaked),
             )
 
+    elif mid == "logviz":
+        # 模块五同样是「自带页面的 native 模块」，但它的安全模型比 filelist 更
+        # 需要证明：filelist 越界只是列出目录，logviz 越界是**把任意文件的内容
+        # 读出来给人看**。所以这一组判据的重点是 ——
+        #   ① 页面与资源是模块自己托管的，且资源逐字节相同（没被中间层改写）
+        #   ② 登记目录 / 列目录 / 探测类型 / 分析 这条主链路真的通
+        #   ③ **越界必须 400**，且不止一种绕过写法
+        #   ④ 源码白名单：/assets/ 只能取 web/ 下的文件，取 module.py 要 404
+        html = body.decode("utf-8", "replace")
+        record(
+            PASS if "{{MOUNT}}" not in html else FAIL,
+            "页面里的挂载点占位符已替换",
+            "残留占位符会让资源整片 404",
+        )
+        asset = re.search(rf'(?:href|src)="({re.escape(mount)}/assets/[^"]+)"', html)
+        record(
+            PASS if asset else FAIL,
+            "页面引用的资源带模块前缀",
+            asset.group(1) if asset else "首页里没找到带前缀的资源",
+        )
+        if asset:
+            asset_path = asset.group(1)
+            status, _, served = request(base, asset_path, cookie=cookie)
+            record(
+                PASS if status == 200 and served else FAIL,
+                "自带资源可加载",
+                f"{asset_path} → HTTP {status} / {len(served)} 字节",
+            )
+            local = ROOT / "modules" / mid / "web" / asset_path.rsplit("/", 1)[-1]
+            if local.is_file():
+                same = served == local.read_bytes()
+                record(
+                    PASS if same else FAIL,
+                    "资源字节 == 模块磁盘原文（逐字节相同）",
+                    f"{len(served)} 字节"
+                    if same
+                    else f"磁盘 {local.stat().st_size} / 代理 {len(served)}",
+                )
+            else:
+                record(SKIP, "资源字节对照", f"找不到磁盘文件 {local}")
+
+        # 源码外泄探针：模块源码就在 web/ 的上一级，白名单一旦写成"目录下任意
+        # 文件"，server 端代码（含路径校验逻辑）就能被直接读走。
+        leaked_src = []
+        for name in ("module.py", "logviz_api.py", "../module.py", "%2e%2e/module.py"):
+            code, _, _ = request(base, f"{mount}/assets/{name}", cookie=cookie)
+            if code == 200:
+                leaked_src.append(f"{name}→HTTP {code}")
+        record(
+            PASS if not leaked_src else FAIL,
+            "源码不在资源白名单里（读不到 module.py）",
+            "4 个探针全部非 200"
+            if not leaked_src
+            else "有漏网的：" + "、".join(leaked_src),
+        )
+
+        status, _, body = request(base, f"{mount}/api/roots", cookie=cookie)
+        try:
+            roots = json.loads(body or b"{}")
+        except ValueError:
+            roots = {}
+        items = roots.get("items") if isinstance(roots, dict) else None
+        record(
+            PASS if status == 200 and isinstance(items, list) else FAIL,
+            "日志目录列表接口可用",
+            f"HTTP {status} / {len(items or [])} 个目录",
+        )
+
+        root_id = (items or [{}])[0].get("id", "") if items else ""
+        if not root_id:
+            record(SKIP, "列一层日志文件", "还没有登记日志目录，无法继续")
+            record(SKIP, "日志类型探测", "还没有登记日志目录，无法继续")
+            record(SKIP, "越界路径一律被拒", "还没有登记日志目录，无法继续")
+        else:
+            status, _, body = request(
+                base, f"{mount}/api/list?root={root_id}&path=", cookie=cookie
+            )
+            try:
+                listing = json.loads(body or b"{}")
+            except ValueError:
+                listing = {}
+            # 这个接口把目录与文件分成两个数组返回（前端左右两栏各取一个），
+            # 不是 filelist 那种单一 entries。
+            dirs = listing.get("dirs") if isinstance(listing, dict) else None
+            files = listing.get("files") if isinstance(listing, dict) else None
+            ok = status == 200 and isinstance(dirs, list) and isinstance(files, list)
+            record(
+                PASS if ok else FAIL,
+                "列一层日志文件",
+                f"HTTP {status} / {len(dirs or [])} 个目录、{len(files or [])} 个文件"
+                if ok
+                else f"HTTP {status}，返回里缺 dirs/files",
+            )
+
+            # 类型探测是模块五的入口动作：识别错了，后面整篇报告都是错的。
+            # 这里只查"接口活着且给出结构"，具体的分型准确度归自检脚本管。
+            if not files:
+                record(SKIP, "日志类型探测", "这一层没有文件可探测")
+            else:
+                target = files[0]
+                status, _, body = request(
+                    base,
+                    f"{mount}/api/detect",
+                    method="POST",
+                    data=json.dumps(
+                        {"root": root_id, "path": target.get("path", "")}
+                    ).encode(),
+                    headers={"Content-Type": "application/json"},
+                    cookie=cookie,
+                )
+                try:
+                    detect = json.loads(body or b"{}")
+                except ValueError:
+                    detect = {}
+                ok = (
+                    status == 200
+                    and isinstance(detect.get("scores"), dict)
+                    and "best" in detect
+                    and "detected" in detect
+                )
+                record(
+                    PASS if ok else FAIL,
+                    "日志类型探测接口可用",
+                    f"HTTP {status} / best={detect.get('best')!r} "
+                    f"confidence={detect.get('confidence')} "
+                    f"detected={detect.get('detected')}"
+                    if ok
+                    else f"HTTP {status}，返回里缺 scores/best/detected",
+                )
+
+            # ⛔ 只读边界，本模块唯一的真安全阀。探针覆盖四种绕过思路：
+            # 相对回溯、盘符绝对、POSIX 绝对、正反斜杠混写。少一种都睡不安稳。
+            probes = ["..", "../..", "sub/../../..", "C:\\Windows", "/Windows", "..\\..\\Windows"]
+            leaked = []
+            for probe in probes:
+                code, _, _ = request(
+                    base,
+                    f"{mount}/api/list?root={root_id}&path={quote(probe, safe='')}",
+                    cookie=cookie,
+                )
+                if code != 400:
+                    leaked.append(f"list/{probe}→HTTP {code}")
+            # 分析接口与下钻接口走的是同一套路径校验，但它们是不同入口，
+            # 各自单独探一遍 —— 只测其中一个，另一个写成裸奔也发现不了。
+            for endpoint in ("detect", "analyze"):
+                code, _, _ = request(
+                    base,
+                    f"{mount}/api/{endpoint}",
+                    method="POST",
+                    data=json.dumps(
+                        {"root": root_id, "path": "../../../../Windows/win.ini"}
+                    ).encode(),
+                    headers={"Content-Type": "application/json"},
+                    cookie=cookie,
+                )
+                if code != 400:
+                    leaked.append(f"{endpoint}/..→HTTP {code}")
+            code, _, _ = request(
+                base,
+                f"{mount}/api/preview?root={root_id}&path={quote('../..', safe='')}",
+                cookie=cookie,
+            )
+            if code != 400:
+                leaked.append(f"preview/..→HTTP {code}")
+            record(
+                PASS if not leaked else FAIL,
+                "越界路径一律被拒（.. 与绝对路径）",
+                f"{len(probes) + 3} 个探针全部 400"
+                if not leaked
+                else "有漏网的：" + "、".join(leaked),
+            )
+
     else:
         record(
             SKIP,
             "第 4–10 节（业务路径与改写）",
-            "这一组是按模块写的具体用例：opsgen 与 portal 已有，其它模块跳过",
+            "这一组是按模块写的具体用例：opsgen / portal / filelist / logviz 已有，其它模块跳过",
         )
 
     # ------------------------------------- 11. 会话隔离（服务端不得记住模块会话）

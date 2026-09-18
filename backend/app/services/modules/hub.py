@@ -25,6 +25,7 @@ from pathlib import Path
 from fastapi import FastAPI
 
 from ... import config
+from ...security import NO_MODULE, ModuleCredential
 from .proxy import ModuleProxy
 from .registry import ModuleRegistry, ModuleRuntime
 from .spec import ModuleSpec, ModuleSpecError
@@ -169,23 +170,31 @@ class ModuleHub:
         return obj
 
     # ------------------------------------------------------------ 鉴权对接
-    def ticket_lookup(self, path: str) -> tuple[str, str, str]:
-        """安全中间件的回调：这个路径归哪个模块管，票据是什么，挂在哪。
+    def ticket_lookup(self, path: str) -> ModuleCredential:
+        """安全中间件的回调：这个路径归哪个模块管、票据是什么、挂在哪、是不是自家模块。
 
-        返回 ("", "", "") 表示「不是模块路径」，此时模块凭据通道关闭，
+        返回 NO_MODULE 表示「不是模块路径」，此时模块凭据通道关闭，
         必须走中台令牌。这样票据的作用域天然就被限制在各自的 mount 里。
 
-        第三个返回值（挂载点）是给「票据换 Cookie」用的 —— 中间件要用它
-        拼出 `Path=<mount>`，把 Cookie 的可见范围钉死在模块自己的路径下。
+        **挂载点**是给「票据换 Cookie」用的 —— 中间件要用它拼出 `Path=<mount>`，
+        把 Cookie 的可见范围钉死在模块自己的路径下。
+
+        **native** 是给「浏览器会话能不能走模块路径」用的：只有中台自己写的
+        模块才认会话，第三方模块不认。理由见 `security.py` 里那段说明。
         """
         found = self.registry.by_mount(path)
         if found is None:
-            return "", "", ""
+            return NO_MODULE
         spec, _rest = found
         runtime = self.registry.runtime(spec.id)
         if runtime is None:
-            return "", "", ""
-        return runtime.ticket, runtime.cookie_name, spec.mount
+            return NO_MODULE
+        return ModuleCredential(
+            ticket=runtime.ticket,
+            cookie_name=runtime.cookie_name,
+            mount=spec.mount,
+            native=spec.kind == "native",
+        )
 
     # ------------------------------------------------------------ 查询
     def public_list(self) -> dict:
