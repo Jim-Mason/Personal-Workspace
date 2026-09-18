@@ -1,0 +1,62 @@
+name: elasticsearch_cleanup
+title: Elasticsearch 索引清理
+description: 按日期清理旧索引，释放磁盘空间
+icon: 🔍
+category: maintenance
+
+questions:
+  - name: es_host
+    label: ES 地址
+    type: string
+    default: "http://localhost:9200"
+    required: true
+  - name: index_prefix
+    label: 索引前缀
+    type: string
+    default: "logs-"
+    required: true
+  - name: retention_days
+    label: 保留天数
+    type: int
+    default: 30
+    min: 1
+    max: 365
+  - name: dry_run
+    label: 试运行
+    type: bool
+    default: true
+  - name: username
+    label: 用户名
+    type: string
+    default: ""
+  - name: password
+    label: 密码
+    type: string
+    default: ""
+
+script: |
+  #!/bin/bash
+  set -euo pipefail
+  ES="{{ es_host }}"
+  PREFIX="{{ index_prefix }}"
+  DAYS={{ retention_days }}
+  AUTH=""
+  {% if username %}
+  AUTH="-u {{ username }}:{{ password }}"
+  {% endif %}
+  CUTOFF=$(date -d "-${DAYS} days" +%Y.%m.%d 2>/dev/null || date -v-${DAYS}d +%Y.%m.%d)
+  echo "清理 ${PREFIX}* 早于 $CUTOFF 的索引"
+  INDICES=$(curl -s $AUTH "${ES}/_cat/indices/${PREFIX}*?h=index" | sort)
+  for idx in $INDICES; do
+    DATE=$(echo "$idx" | grep -oE '[0-9]{4}\.[0-9]{2}\.[0-9]{2}' | tail -1)
+    [ -z "$DATE" ] && continue
+    if [[ "$DATE" < "$CUTOFF" ]]; then
+      {% if dry_run %}
+      echo "[DRY-RUN] 删除 $idx"
+      {% else %}
+      echo "删除 $idx"
+      curl -s $AUTH -X DELETE "${ES}/${idx}"
+      {% endif %}
+    fi
+  done
+  echo "==> 完成"

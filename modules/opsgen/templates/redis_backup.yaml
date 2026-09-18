@@ -1,0 +1,47 @@
+name: redis_backup
+title: Redis 备份
+description: RDB 快照备份与 AOF 复制脚本
+icon: 💾
+category: backup
+
+questions:
+  - name: host
+    label: Redis 主机
+    type: string
+    default: 127.0.0.1
+  - name: port
+    label: 端口
+    type: int
+    default: 6379
+  - name: password
+    label: 密码
+    type: string
+    default: ""
+  - name: backup_dir
+    label: 备份目录
+    type: string
+    default: /backup/redis
+    required: true
+  - name: retention_days
+    label: 保留天数
+    type: int
+    default: 7
+    min: 1
+    max: 30
+
+script: |
+  #!/bin/bash
+  set -euo pipefail
+  BACKUP_DIR="{{ backup_dir }}"
+  TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+  mkdir -p "$BACKUP_DIR"
+  AUTH=""
+  {% if password %}
+  AUTH="-a '{{ password }}'"
+  {% endif %}
+  redis-cli -h {{ host }} -p {{ port }} $AUTH BGSAVE
+  sleep 2
+  RDB=$(redis-cli -h {{ host }} -p {{ port }} $AUTH CONFIG GET dir | tail -1)
+  cp "${RDB}/dump.rdb" "${BACKUP_DIR}/dump_${TIMESTAMP}.rdb"
+  find "$BACKUP_DIR" -name "dump_*.rdb" -mtime +{{ retention_days }} -delete
+  echo "==> Redis 备份: ${BACKUP_DIR}/dump_${TIMESTAMP}.rdb"

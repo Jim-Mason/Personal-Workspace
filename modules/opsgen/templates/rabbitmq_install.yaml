@@ -1,0 +1,52 @@
+name: rabbitmq_install
+title: RabbitMQ 安装
+description: 安装 RabbitMQ 并创建用户、虚拟主机
+icon: 🐰
+category: deploy
+
+questions:
+  - name: admin_user
+    label: 管理员用户名
+    type: string
+    default: admin
+    required: true
+  - name: admin_password
+    label: 管理员密码
+    type: string
+    default: changeme
+    required: true
+  - name: vhost
+    label: 虚拟主机
+    type: string
+    default: /myapp
+  - name: enable_management
+    label: 启用管理插件
+    type: bool
+    default: true
+  - name: management_port
+    label: 管理端口
+    type: int
+    default: 15672
+    min: 1
+    max: 65535
+
+script: |
+  #!/bin/bash
+  set -euo pipefail
+  apt-get update -y
+  apt-get install -y curl gnupg
+  curl -fsSL https://github.com/rabbitmq/signing-keys/releases/download/3.0/cloudsmith.rabbitmq-erlang.E495BB49CC4BBE5B.key | apt-key add -
+  curl -fsSL https://github.com/rabbitmq/signing-keys/releases/download/3.0/cloudsmith.rabbitmq-server.9F4587F226208342.key | apt-key add -
+  apt-get install -y rabbitmq-server erlang
+  {% if enable_management %}
+  rabbitmq-plugins enable rabbitmq_management
+  {% endif %}
+  rabbitmqctl add_user {{ admin_user }} '{{ admin_password }}' 2>/dev/null || rabbitmqctl change_password {{ admin_user }} '{{ admin_password }}'
+  rabbitmqctl set_user_tags {{ admin_user }} administrator
+  rabbitmqctl add_vhost {{ vhost }} 2>/dev/null || true
+  rabbitmqctl set_permissions -p {{ vhost }} {{ admin_user }} ".*" ".*" ".*"
+  systemctl enable rabbitmq-server && systemctl restart rabbitmq-server
+  echo "==> RabbitMQ 已安装"
+  {% if enable_management %}
+  echo "管理界面: http://localhost:{{ management_port }}"
+  {% endif %}

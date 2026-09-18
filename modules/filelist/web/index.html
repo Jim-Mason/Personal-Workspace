@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>本地文件列表</title>
+    <!-- 占位符 {{MOUNT}} 由 filelist_api.page() 在返回时替换成真实挂载点。
+         写死路径的话，改个挂载点页面就整片 404，而且是「HTML 打得开、
+         CSS 拿不到」那种半死状态。 -->
+    <link rel="stylesheet" href="{{MOUNT}}/assets/view.css" />
+    <script>
+      window.__FL__ = { mount: "{{MOUNT}}" };
+    </script>
+  </head>
+  <body>
+    <header class="fl-top">
+      <div class="fl-brand">
+        <span class="fl-brand-mark">目</span>
+        <div>
+          <h1>本地文件列表</h1>
+          <p>把目录读成一本「书的目录」 · 全程只读，不写不删不移不改名</p>
+        </div>
+      </div>
+      <div class="fl-top-actions">
+        <label class="fl-switch">
+          <input type="checkbox" id="fl-show-files" checked />
+          显示文件
+        </label>
+        <label class="fl-switch">
+          <input type="checkbox" id="fl-counts" checked />
+          统计条目数
+        </label>
+        <label class="fl-field">
+          展开层数
+          <select id="fl-depth">
+            <option value="1">1 层</option>
+            <option value="2" selected>2 层</option>
+            <option value="3">3 层</option>
+            <option value="0">全部展开</option>
+          </select>
+        </label>
+        <label class="fl-field">
+          排序
+          <select id="fl-sort">
+            <option value="name">按名称</option>
+            <option value="mtime">按修改时间</option>
+            <option value="size">按大小</option>
+            <option value="kind">按类型</option>
+          </select>
+        </label>
+        <button type="button" class="fl-btn" id="fl-collapse">全部收起</button>
+      </div>
+    </header>
+
+    <div class="fl-body">
+      <aside class="fl-side">
+        <div class="fl-side-head">
+          <h2>书库</h2>
+          <button type="button" class="fl-btn fl-btn-sm" id="fl-add-toggle">+ 新增</button>
+        </div>
+
+        <form class="fl-add" id="fl-add" hidden>
+          <input
+            type="text"
+            id="fl-add-path"
+            placeholder="目录绝对路径，例如 D:\git_data"
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <input type="text" id="fl-add-name" placeholder="给它起个名字（可留空）" autocomplete="off" />
+          <div class="fl-add-actions">
+            <button type="submit" class="fl-btn fl-btn-primary fl-btn-sm">登记</button>
+            <button type="button" class="fl-btn fl-btn-sm" id="fl-add-cancel">取消</button>
+          </div>
+          <p class="fl-hint" id="fl-add-msg"></p>
+        </form>
+
+        <ul class="fl-roots" id="fl-roots"></ul>
+
+        <div class="fl-side-foot">
+          <p>移除书库只会取消登记，<strong>磁盘上的目录一个字都不会动</strong>。</p>
+        </div>
+      </aside>
+
+      <main class="fl-main">
+        <div class="fl-toolbar">
+          <nav class="fl-crumbs" id="fl-crumbs"></nav>
+          <div class="fl-toolbar-right">
+            <input
+              type="search"
+              id="fl-search"
+              class="fl-input"
+              placeholder="在本层里筛选…（按回车）"
+              autocomplete="off"
+            />
+            <span class="fl-stat" id="fl-stat"></span>
+          </div>
+        </div>
+
+        <div class="fl-sheet" id="fl-sheet">
+          <p class="fl-empty" id="fl-empty">
+            左边选一个书库，或先「+ 新增」登记一个要看的目录。
+          </p>
+        </div>
+      </main>
+    </div>
+
+    <script src="{{MOUNT}}/assets/view.js"></script>
+  </body>
+</html>

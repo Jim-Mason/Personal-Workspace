@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+
+{% block title %}{% if mode == 'edit' %}编辑模板{% else %}添加模板{% endif %}{% endblock %}
+
+{% block content %}
+<section class="editor-page">
+  <div class="form-header glass">
+    <a href="{{ url_for('index') }}" class="back-link">← 返回模板列表</a>
+    <h1>{% if mode == 'edit' %}✏️ 编辑模板{% else %}＋ 添加自定义模板{% endif %}</h1>
+    <p>使用 YAML 格式定义问题列表和脚本模板，支持 Jinja2 语法</p>
+  </div>
+
+  {% if error %}
+  <div class="alert alert-error glass">{{ error }}</div>
+  {% endif %}
+
+  <div id="validate-result" class="alert glass hidden"></div>
+
+  <form method="POST" class="editor-form glass" id="template-editor-form">
+    <div class="editor-toolbar">
+      <div class="editor-toolbar-left">
+        {% if mode == 'create' %}
+        <a href="{{ url_for('template_create') }}" class="btn btn-sm btn-ghost">空白模板</a>
+        <a href="{{ url_for('template_create', starter='example') }}" class="btn btn-sm btn-ghost">加载示例</a>
+        {% endif %}
+        <label class="btn btn-sm btn-ghost import-label">
+          📁 导入 YAML
+          <input type="file" id="import-yaml" accept=".yaml,.yml,text/yaml" hidden>
+        </label>
+        <button type="button" class="btn btn-sm btn-ghost" id="validate-btn">✓ 验证 YAML</button>
+      </div>
+    <div class="editor-toolbar-right">
+      {% if mode == 'edit' %}
+      <a href="{{ url_for('template_versions', name=template_name) }}" class="btn btn-sm btn-ghost">📚 版本历史</a>
+      {% endif %}
+      <button type="submit" class="btn btn-primary">💾 保存模板</button>
+    </div>
+    </div>
+
+    <textarea name="yaml_content" id="yaml-content" class="yaml-editor" spellcheck="false"
+              placeholder="在此粘贴或编写 YAML 模板...">{{ yaml_content }}</textarea>
+
+    <details class="editor-help glass">
+      <summary>YAML 格式说明</summary>
+      <div class="help-content">
+        <p><strong>必填字段：</strong><code>name</code>、<code>title</code>、<code>script</code></p>
+        <p><strong>问题类型：</strong><code>string</code>、<code>int</code>、<code>bool</code>、<code>choice</code>、<code>multi</code></p>
+        <p><strong>条件显示：</strong><code>show_when: { field_name: true }</code></p>
+        <p><strong>变量计算：</strong><code>computed: { key: "expression" }</code></p>
+        <p><strong>标签：</strong><code>tags: [nginx, deploy, web]</code>（可选，用于搜索）</p>
+        <p>脚本中使用 <code>{{ '{{' }} variable {{ '}}' }}</code> 引用参数，支持 <code>{% raw %}{% if %}{% endif %}{% endraw %}</code></p>
+      </div>
+    </details>
+  </form>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/template_editor.js') }}"></script>
+{% endblock %}

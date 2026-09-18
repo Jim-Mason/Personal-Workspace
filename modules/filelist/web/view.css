@@ -1,0 +1,557 @@
+/* 本地文件列表 —— 模块自带样式表。
+ *
+ * 视觉上刻意做成「书的目录页」：等宽编号 + 点线引导 + 右对齐的条目数，
+ * 而不是资源管理器那种一行一条的表格。目的是让人一眼看出层级全貌和
+ * 「这一卷有多厚」，而不是逐行去读。
+ *
+ * 无外部依赖、无字体下载（对应平台的「零网络上传、无遥测」）。
+ */
+
+:root {
+  --fl-bg: #f7f5f0;
+  --fl-panel: #fffdf8;
+  --fl-ink: #26221c;
+  --fl-ink-soft: #6b6357;
+  --fl-ink-faint: #9c9384;
+  --fl-line: #e2dbcd;
+  --fl-accent: #8a5a2b;
+  --fl-accent-soft: #f0e4d2;
+  --fl-hover: #f2ece0;
+  --fl-danger: #a33a2a;
+  --fl-mono: ui-monospace, "Cascadia Mono", "Consolas", "Courier New", monospace;
+  --fl-sans: "Segoe UI", system-ui, -apple-system, "Microsoft YaHei", sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fl-bg: #1a1917;
+    --fl-panel: #232120;
+    --fl-ink: #ece7de;
+    --fl-ink-soft: #a9a196;
+    --fl-ink-faint: #7c746a;
+    --fl-line: #38342f;
+    --fl-accent: #d9a273;
+    --fl-accent-soft: #3a2f24;
+    --fl-hover: #2c2926;
+    --fl-danger: #e07a63;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--fl-bg);
+  color: var(--fl-ink);
+  font-family: var(--fl-sans);
+  font-size: 14px;
+  line-height: 1.55;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ------------------------------------------------------------ 顶栏 */
+.fl-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 14px 20px;
+  background: var(--fl-panel);
+  border-bottom: 1px solid var(--fl-line);
+}
+
+.fl-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.fl-brand-mark {
+  width: 38px;
+  height: 38px;
+  border-radius: 9px;
+  background: linear-gradient(135deg, var(--fl-accent), #c98a4b);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-size: 19px;
+  font-weight: 600;
+}
+
+.fl-brand h1 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.fl-brand p {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--fl-ink-soft);
+}
+
+.fl-top-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  color: var(--fl-ink-soft);
+}
+
+.fl-switch,
+.fl-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------ 通用控件 */
+.fl-btn {
+  border: 1px solid var(--fl-line);
+  background: var(--fl-panel);
+  color: var(--fl-ink);
+  border-radius: 7px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.fl-btn:hover {
+  background: var(--fl-hover);
+}
+
+.fl-btn-sm {
+  padding: 4px 9px;
+  font-size: 12px;
+}
+
+.fl-btn-primary {
+  background: var(--fl-accent);
+  border-color: var(--fl-accent);
+  color: #fff;
+}
+
+.fl-btn-primary:hover {
+  filter: brightness(1.08);
+  background: var(--fl-accent);
+}
+
+.fl-input,
+.fl-add input,
+.fl-field select {
+  border: 1px solid var(--fl-line);
+  background: var(--fl-bg);
+  color: var(--fl-ink);
+  border-radius: 7px;
+  padding: 5px 9px;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.fl-input {
+  width: 240px;
+}
+
+/* ------------------------------------------------------------ 主体 */
+.fl-body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.fl-side {
+  width: 288px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--fl-line);
+  background: var(--fl-panel);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.fl-side-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px 8px;
+}
+
+.fl-side-head h2 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--fl-ink-soft);
+}
+
+.fl-add {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 0 16px 12px;
+}
+
+.fl-add-actions {
+  display: flex;
+  gap: 7px;
+}
+
+.fl-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--fl-danger);
+  min-height: 17px;
+}
+
+.fl-roots {
+  list-style: none;
+  margin: 0;
+  padding: 0 8px 12px;
+  overflow: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.fl-root {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 9px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.fl-root:hover {
+  background: var(--fl-hover);
+}
+
+.fl-root.is-active {
+  background: var(--fl-accent-soft);
+}
+
+.fl-root.is-missing {
+  opacity: 0.65;
+}
+
+.fl-root-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.fl-root-name {
+  font-weight: 600;
+  font-size: 13.5px;
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fl-root-path {
+  display: block;
+  font-family: var(--fl-mono);
+  font-size: 11.5px;
+  color: var(--fl-ink-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl; /* 路径太长时保住尾部（最有信息量的那一段） */
+  text-align: left;
+}
+
+.fl-root-flag {
+  font-size: 11px;
+  color: var(--fl-danger);
+}
+
+.fl-root-x {
+  border: 0;
+  background: none;
+  color: var(--fl-ink-faint);
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+  padding: 2px 4px;
+  border-radius: 5px;
+}
+
+.fl-root-x:hover {
+  color: var(--fl-danger);
+  background: var(--fl-hover);
+}
+
+.fl-side-foot {
+  border-top: 1px solid var(--fl-line);
+  padding: 10px 16px;
+}
+
+.fl-side-foot p {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--fl-ink-faint);
+  line-height: 1.5;
+}
+
+.fl-main {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.fl-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--fl-line);
+  flex-wrap: wrap;
+}
+
+.fl-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.fl-stat {
+  font-size: 12px;
+  color: var(--fl-ink-soft);
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------ 面包屑 */
+.fl-crumbs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  font-size: 12.5px;
+  color: var(--fl-ink-soft);
+  min-width: 0;
+}
+
+.fl-crumb {
+  border: 0;
+  background: none;
+  color: var(--fl-accent);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: inherit;
+  padding: 1px 3px;
+  border-radius: 4px;
+}
+
+.fl-crumb:hover {
+  background: var(--fl-hover);
+}
+
+.fl-crumb-sep {
+  color: var(--fl-ink-faint);
+}
+
+/* ------------------------------------------------------------ 目录页 */
+.fl-sheet {
+  flex: 1;
+  overflow: auto;
+  padding: 18px 24px 60px;
+  min-height: 0;
+}
+
+.fl-empty {
+  color: var(--fl-ink-faint);
+  font-size: 13.5px;
+}
+
+.fl-volume {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--fl-accent);
+  margin: 0 0 12px;
+  padding-bottom: 6px;
+  border-bottom: 2px solid var(--fl-line);
+}
+
+.fl-toc {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.fl-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  border-radius: 6px;
+  padding: 3px 8px;
+  cursor: default;
+}
+
+.fl-row:hover {
+  background: var(--fl-hover);
+}
+
+.fl-row.is-dir {
+  cursor: pointer;
+}
+
+.fl-row.is-open > .fl-name {
+  font-weight: 600;
+}
+
+.fl-row.is-busy {
+  opacity: 0.6;
+}
+
+.fl-caret {
+  width: 12px;
+  flex-shrink: 0;
+  color: var(--fl-ink-faint);
+  font-size: 10px;
+  transition: transform 0.12s ease;
+  display: inline-block;
+}
+
+.fl-row.is-open .fl-caret {
+  transform: rotate(90deg);
+}
+
+.fl-caret.is-leaf {
+  visibility: hidden;
+}
+
+.fl-row.is-file .fl-caret {
+  visibility: hidden;
+}
+
+.fl-num {
+  font-family: var(--fl-mono);
+  font-size: 12px;
+  color: var(--fl-accent);
+  flex-shrink: 0;
+  min-width: 3.4em;
+  text-align: right;
+}
+
+.fl-name {
+  font-size: 13.5px;
+  color: var(--fl-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 46ch;
+}
+
+.fl-row.is-dir .fl-name {
+  font-weight: 550;
+}
+
+.fl-row.is-file .fl-name {
+  color: var(--fl-ink-soft);
+}
+
+/* 点线引导：目录页的灵魂。flex:1 撑开剩余空间，底边打点。 */
+.fl-leader {
+  flex: 1;
+  min-width: 18px;
+  border-bottom: 1px dotted var(--fl-line);
+  transform: translateY(-3px);
+}
+
+.fl-meta {
+  flex-shrink: 0;
+  font-family: var(--fl-mono);
+  font-size: 11.5px;
+  color: var(--fl-ink-faint);
+  min-width: 6.5em;
+  text-align: right;
+}
+
+.fl-badge {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--fl-ink-faint);
+  border: 1px solid var(--fl-line);
+  border-radius: 5px;
+  padding: 0 5px;
+}
+
+.fl-badge.is-warn {
+  color: var(--fl-danger);
+  border-color: var(--fl-danger);
+}
+
+.fl-actions {
+  flex-shrink: 0;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+}
+
+.fl-row:hover .fl-actions {
+  opacity: 1;
+}
+
+.fl-mini {
+  border: 1px solid var(--fl-line);
+  background: var(--fl-panel);
+  color: var(--fl-ink-soft);
+  font-size: 11px;
+  font-family: inherit;
+  border-radius: 5px;
+  padding: 1px 6px;
+  cursor: pointer;
+}
+
+.fl-mini:hover {
+  background: var(--fl-hover);
+  color: var(--fl-ink);
+}
+
+.fl-children {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.fl-note {
+  font-size: 11.5px;
+  color: var(--fl-ink-faint);
+  padding: 3px 8px 3px 30px;
+}
+
+.fl-error {
+  font-size: 12px;
+  color: var(--fl-danger);
+  padding: 2px 8px 2px 30px;
+}
+
+@media (max-width: 900px) {
+  .fl-body {
+    flex-direction: column;
+  }
+  .fl-side {
+    width: 100%;
+    border-right: 0;
+    border-bottom: 1px solid var(--fl-line);
+    max-height: 40vh;
+  }
+  .fl-input {
+    width: 150px;
+  }
+}

@@ -1,0 +1,43 @@
+name: nfs_mount
+title: NFS 挂载
+description: 挂载 NFS 远程目录并写入 fstab
+icon: 📂
+category: deploy
+
+questions:
+  - name: nfs_server
+    label: NFS 服务器
+    type: string
+    default: 192.168.1.100
+    required: true
+  - name: remote_path
+    label: 远程路径
+    type: string
+    default: /data/shared
+    required: true
+  - name: mount_point
+    label: 本地挂载点
+    type: string
+    default: /mnt/nfs
+    required: true
+  - name: nfs_version
+    label: NFS 版本
+    type: choice
+    choices: ["3", "4"]
+    default: "4"
+  - name: mount_options
+    label: 挂载选项
+    type: string
+    default: "defaults,_netdev,noatime"
+
+script: |
+  #!/bin/bash
+  set -euo pipefail
+  apt-get install -y nfs-common
+  mkdir -p {{ mount_point }}
+  mount -t nfs{% if nfs_version == '4' %}4{% endif %} -o {{ mount_options }} \
+    {{ nfs_server }}:{{ remote_path }} {{ mount_point }}
+  FSTAB="{{ nfs_server }}:{{ remote_path }} {{ mount_point }} nfs{% if nfs_version == '4' %}4{% endif %} {{ mount_options }} 0 0"
+  grep -q "{{ mount_point }}" /etc/fstab || echo "$FSTAB" >> /etc/fstab
+  df -h {{ mount_point }}
+  echo "==> NFS 已挂载"

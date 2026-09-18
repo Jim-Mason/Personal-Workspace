@@ -1,0 +1,65 @@
+name: mongodb_backup
+title: MongoDB 备份
+description: mongodump 备份脚本，支持单库/全库与压缩
+icon: 🍃
+category: backup
+
+questions:
+  - name: host
+    label: 主机地址
+    type: string
+    default: localhost
+  - name: port
+    label: 端口
+    type: int
+    default: 27017
+  - name: db_name
+    label: 数据库名
+    type: string
+    default: ""
+    help: 留空备份所有库
+  - name: username
+    label: 用户名
+    type: string
+    default: ""
+  - name: password
+    label: 密码
+    type: string
+    default: ""
+  - name: backup_dir
+    label: 备份目录
+    type: string
+    default: /backup/mongodb
+    required: true
+  - name: retention_days
+    label: 保留天数
+    type: int
+    default: 7
+    min: 1
+    max: 90
+  - name: compress
+    label: 归档压缩
+    type: bool
+    default: true
+
+script: |
+  #!/bin/bash
+  set -euo pipefail
+  BACKUP_DIR="{{ backup_dir }}"
+  TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+  OUT="${BACKUP_DIR}/mongo_${TIMESTAMP}"
+  mkdir -p "$BACKUP_DIR"
+  AUTH=""
+  {% if username %}
+  AUTH="--username {{ username }} --password '{{ password }}' --authenticationDatabase admin"
+  {% endif %}
+  {% if db_name %}
+  mongodump --host {{ host }} --port {{ port }} $AUTH --db {{ db_name }} --out "$OUT"
+  {% else %}
+  mongodump --host {{ host }} --port {{ port }} $AUTH --out "$OUT"
+  {% endif %}
+  {% if compress %}
+  tar -czf "${OUT}.tar.gz" -C "$BACKUP_DIR" "$(basename "$OUT")" && rm -rf "$OUT"
+  {% endif %}
+  find "$BACKUP_DIR" -name "mongo_*" -mtime +{{ retention_days }} -delete
+  echo "==> MongoDB 备份完成"

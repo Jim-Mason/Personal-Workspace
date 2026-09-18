@@ -1,0 +1,55 @@
+name: network_diag
+title: 网络诊断
+description: 综合网络排查：DNS、路由、端口、延迟测试
+icon: 🌐
+category: diagnose
+
+questions:
+  - name: target_host
+    label: 目标主机
+    type: string
+    default: example.com
+    required: true
+  - name: target_port
+    label: 目标端口
+    type: int
+    default: 443
+    min: 1
+    max: 65535
+  - name: ping_count
+    label: Ping 次数
+    type: int
+    default: 4
+    min: 1
+    max: 20
+  - name: trace_route
+    label: 路由追踪
+    type: bool
+    default: true
+  - name: check_dns
+    label: DNS 解析
+    type: bool
+    default: true
+
+script: |
+  #!/bin/bash
+  TARGET="{{ target_host }}"
+  PORT={{ target_port }}
+  echo "===== 网络诊断: $TARGET:$PORT ====="
+  echo "--- 本机网络 ---"
+  ip addr show | grep -E 'inet |state'
+  echo "--- 默认路由 ---"
+  ip route | head -5
+  {% if check_dns %}
+  echo "--- DNS 解析 ---"
+  dig +short "$TARGET" A 2>/dev/null || nslookup "$TARGET" 2>/dev/null || host "$TARGET"
+  {% endif %}
+  echo "--- Ping ($TARGET) ---"
+  ping -c {{ ping_count }} "$TARGET" 2>/dev/null || echo "Ping 不可达"
+  echo "--- 端口连通 ($PORT) ---"
+  nc -zv -w 5 "$TARGET" "$PORT" 2>&1 || curl -s -o /dev/null -w "HTTP: %{http_code}\n" --max-time 5 "http://${TARGET}:${PORT}" 2>/dev/null || echo "端口不可达"
+  {% if trace_route %}
+  echo "--- 路由追踪 ---"
+  traceroute -m 15 "$TARGET" 2>/dev/null || tracepath "$TARGET" 2>/dev/null || echo "traceroute 不可用"
+  {% endif %}
+  echo "===== 诊断完成 ====="

@@ -1,0 +1,124 @@
+name: java_cpu_diag
+title: Java 应用 CPU 诊断
+description: 综合 CPU 诊断脚本，包含 top -H、jstack 采样与线程分析
+icon: ☕
+category: diagnose
+
+questions:
+  - name: pid
+    label: 进程 PID
+    type: int
+    default: 0
+    min: 0
+    help: 留 0 则自动检测 Java 进程
+
+  - name: sample_count
+    label: 采样次数
+    type: int
+    default: 5
+    min: 1
+    max: 20
+    required: true
+    help: jstack 采样次数
+
+  - name: sample_interval
+    label: 采样间隔 (秒)
+    type: int
+    default: 3
+    min: 1
+    max: 60
+    required: true
+    help: 每次采样之间的等待时间
+
+  - name: output_dir
+    label: 输出目录
+    type: string
+    default: /tmp/java_diag
+    required: true
+    help: 诊断报告保存目录
+
+script: |
+  #!/bin/bash
+  # Java CPU 诊断脚本
+  # 采样 {{ sample_count }} 次，间隔 {{ sample_interval }} 秒
+  set -euo pipefail
+
+  PID={{ pid }}
+  SAMPLE_COUNT={{ sample_count }}
+  INTERVAL={{ sample_interval }}
+  OUTPUT_DIR="{{ output_dir }}"
+  TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+
+  REPORT_DIR="${OUTPUT_DIR}/diag_${TIMESTAMP}"
+  mkdir -p "$REPORT_DIR"
+
+  log() { echo "[$(date '+%H:%M:%S')] $*"; }
+
+  if [ "$PID" -eq 0 ]; then
+      log "自动检测 Java 进程..."
+      PID=$(pgrep -f 'java' | head -1 || true)
+      if [ -z "$PID" ]; then
+          echo "错误: 未找到 Java 进程，请手动指定 PID"
+          exit 1
+      fi
+      log "检测到 Java 进程 PID: $PID"
+  fi
+
+  if ! kill -0 "$PID" 2>/dev/null; then
+      echo "错误: 进程 $PID 不存在"
+      exit 1
+  fi
+
+  log "===== Java CPU 诊断报告 =====" | tee "$REPORT_DIR/summary.txt"
+  log "PID: $PID" | tee -a "$REPORT_DIR/summary.txt"
+  log "时间: $(date)" | tee -a "$REPORT_DIR/summary.txt"
+  log "报告目录: $REPORT_DIR" | tee -a "$REPORT_DIR/summary.txt"
+
+  log "--> 收集进程基本信息..."
+  ps -p "$PID" -o pid,ppid,user,%cpu,%mem,vsz,rss,stat,start,time,cmd > "$REPORT_DIR/process_info.txt"
+  cat "$REPORT_DIR/process_info.txt"
+
+  log "--> 收集 CPU 最高的线程 (top -H)..."
+  top -H -b -n 3 -d 1 -p "$PID" > "$REPORT_DIR/top_threads.txt" 2>&1 || true
+
+  log "--> 提取高 CPU 线程..."
+  awk 'NR>7 && $9+0 > 5 {printf "TID=%s CPU=%s%% CMD=%s\n", $1, $9, $12}' \
+      "$REPORT_DIR/top_threads.txt" | sort -t= -k2 -rn | head -20 \
+      > "$REPORT_DIR/hot_threads.txt"
+  cat "$REPORT_DIR/hot_threads.txt"
+
+  JAVA_BIN=$(readlink -f "/proc/$PID/exe" 2>/dev/null || echo "java")
+
+  log "--> 执行 jstack 采样 (${SAMPLE_COUNT} 次)..."
+  for i in $(seq 1 "$SAMPLE_COUNT"); do
+      log "  采样 $i/$SAMPLE_COUNT..."
+      "$JAVA_BIN" -jar "$(dirname "$0")"/../lib/tools.jar 2>/dev/null || true
+      jstack -l "$PID" > "$REPORT_DIR/jstack_${i}.txt" 2>&1 || \
+          "$JAVA_BIN" -c "jstack -l $PID" > "$REPORT_DIR/jstack_${i}.txt" 2>&1 || \
+          jstack "$PID" > "$REPORT_DIR/jstack_${i}.txt" 2>&1 || true
+      [ "$i" -lt "$SAMPLE_COUNT" ] && sleep "$INTERVAL"
+  done
+
+  log "--> 分析线程状态..."
+  grep -h "java.lang.Thread.State" "$REPORT_DIR"/jstack_*.txt 2>/dev/null \
+      | sort | uniq -c | sort -rn > "$REPORT_DIR/thread_states.txt" || true
+  cat "$REPORT_DIR/thread_states.txt" 2>/dev/null || echo "无 jstack 数据"
+
+  log "--> 检测死锁..."
+  grep -l "Found one Java-level deadlock" "$REPORT_DIR"/jstack_*.txt 2>/dev/null \
+      > "$REPORT_DIR/deadlocks.txt" || echo "未检测到死锁" > "$REPORT_DIR/deadlocks.txt"
+
+  log "--> 生成诊断摘要..."
+  {
+      echo "=== 高 CPU 线程 TOP 5 ==="
+      head -5 "$REPORT_DIR/hot_threads.txt" 2>/dev/null || echo "N/A"
+      echo ""
+      echo "=== 线程状态分布 ==="
+      cat "$REPORT_DIR/thread_states.txt" 2>/dev/null || echo "N/A"
+      echo ""
+      echo "=== 死锁检测 ==="
+      cat "$REPORT_DIR/deadlocks.txt"
+  } >> "$REPORT_DIR/summary.txt"
+
+  log "===== 诊断完成，报告保存在 $REPORT_DIR ====="
+  log "查看摘要: cat $REPORT_DIR/summary.txt"

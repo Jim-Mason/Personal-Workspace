@@ -1,0 +1,68 @@
+name: tomcat_deploy
+title: Tomcat 部署
+description: 安装 Tomcat 并部署 WAR 包
+icon: 🐱
+category: deploy
+
+questions:
+  - name: version
+    label: Tomcat 版本
+    type: string
+    default: "10.1.18"
+  - name: port
+    label: HTTP 端口
+    type: int
+    default: 8080
+    min: 1
+    max: 65535
+  - name: install_dir
+    label: 安装目录
+    type: string
+    default: /opt/tomcat
+  - name: war_url
+    label: WAR 包 URL
+    type: string
+    default: ""
+    help: 留空仅安装 Tomcat
+  - name: app_name
+    label: 应用名称
+    type: string
+    default: myapp
+  - name: java_opts
+    label: JAVA_OPTS
+    type: string
+    default: "-Xms512m -Xmx1024m"
+
+script: |
+  #!/bin/bash
+  set -euo pipefail
+  VER="{{ version }}"
+  DIR="{{ install_dir }}"
+  apt-get update -y && apt-get install -y openjdk-17-jdk curl
+  useradd -r -m -U -d "$DIR" -s /bin/false tomcat 2>/dev/null || true
+  curl -sL "https://archive.apache.org/dist/tomcat/tomcat-10/v${VER}/bin/apache-tomcat-${VER}.tar.gz" \
+    | tar xz -C /tmp
+  rm -rf "$DIR"/* && cp -r /tmp/apache-tomcat-${VER}/* "$DIR/"
+  chown -R tomcat:tomcat "$DIR"
+  sed -i 's/port="8080"/port="{{ port }}"/' "$DIR/conf/server.xml"
+  echo 'JAVA_OPTS="{{ java_opts }}"' > "$DIR/bin/setenv.sh"
+  chmod +x "$DIR/bin/setenv.sh"
+  {% if war_url %}
+  curl -sL "{{ war_url }}" -o "$DIR/webapps/{{ app_name }}.war"
+  chown tomcat:tomcat "$DIR/webapps/{{ app_name }}.war"
+  {% endif %}
+  cat > /etc/systemd/system/tomcat.service <<EOF
+  [Unit]
+  Description=Apache Tomcat
+  After=network.target
+  [Service]
+  Type=forking
+  User=tomcat
+  Environment=CATALINA_HOME=${DIR}
+  ExecStart=${DIR}/bin/startup.sh
+  ExecStop=${DIR}/bin/shutdown.sh
+  [Install]
+  WantedBy=multi-user.target
+  EOF
+  systemctl daemon-reload && systemctl enable --now tomcat
+  echo "==> Tomcat 运行在 http://localhost:{{ port }}"

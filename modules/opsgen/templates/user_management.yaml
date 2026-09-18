@@ -1,0 +1,66 @@
+name: user_management
+title: Linux 用户管理
+description: 创建/删除系统用户，配置 sudo 与 SSH 密钥
+icon: 👤
+category: deploy
+
+questions:
+  - name: action
+    label: 操作
+    type: choice
+    choices: [create, delete]
+    default: create
+  - name: username
+    label: 用户名
+    type: string
+    default: deploy
+    required: true
+  - name: ssh_pubkey
+    label: SSH 公钥
+    type: string
+    default: ""
+    help: 创建用户时使用，留空不配置
+    show_when:
+      action: create
+  - name: grant_sudo
+    label: 授予 sudo 权限
+    type: bool
+    default: true
+    show_when:
+      action: create
+  - name: shell
+    label: Shell
+    type: choice
+    choices: [/bin/bash, /bin/sh, /usr/sbin/nologin]
+    default: /bin/bash
+    show_when:
+      action: create
+
+script: |
+  #!/bin/bash
+  set -euo pipefail
+  USER="{{ username }}"
+  {% if action == 'create' %}
+  if id "$USER" &>/dev/null; then
+    echo "用户 $USER 已存在"
+  else
+    useradd -m -s {{ shell }} "$USER"
+    echo "==> 用户 $USER 已创建"
+  fi
+  {% if ssh_pubkey %}
+  mkdir -p /home/$USER/.ssh
+  echo "{{ ssh_pubkey }}" > /home/$USER/.ssh/authorized_keys
+  chmod 700 /home/$USER/.ssh
+  chmod 600 /home/$USER/.ssh/authorized_keys
+  chown -R $USER:$USER /home/$USER/.ssh
+  echo "==> SSH 密钥已配置"
+  {% endif %}
+  {% if grant_sudo %}
+  echo "$USER ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/$USER
+  chmod 440 /etc/sudoers.d/$USER
+  echo "==> sudo 权限已授予"
+  {% endif %}
+  {% else %}
+  userdel -r "$USER" 2>/dev/null && echo "==> 用户 $USER 已删除" || echo "用户不存在"
+  rm -f /etc/sudoers.d/$USER
+  {% endif %}

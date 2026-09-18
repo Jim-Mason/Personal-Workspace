@@ -1,0 +1,40 @@
+name: memory_diag
+title: 内存诊断
+description: 分析内存使用、Swap、OOM 与 Top 进程
+icon: 🧠
+category: diagnose
+
+questions:
+  - name: top_n
+    label: Top 进程数
+    type: int
+    default: 10
+    min: 5
+    max: 50
+  - name: show_slab
+    label: 显示 Slab 缓存
+    type: bool
+    default: true
+  - name: check_oom
+    label: 检查 OOM 记录
+    type: bool
+    default: true
+
+script: |
+  #!/bin/bash
+  echo "===== 内存诊断 $(date) ====="
+  echo "--- 内存概览 ---"
+  free -h
+  echo "--- 内存详情 /proc/meminfo ---"
+  grep -E 'MemTotal|MemFree|MemAvailable|Buffers|Cached|SwapTotal|SwapFree|Slab' /proc/meminfo
+  {% if show_slab %}
+  echo "--- Slab Top ---"
+  slabtop -o 2>/dev/null | head -15 || echo "slabtop 不可用"
+  {% endif %}
+  echo "--- Top {{ top_n }} 内存进程 ---"
+  ps aux --sort=-%mem | head -{{ top_n + 1 }}
+  {% if check_oom %}
+  echo "--- OOM Killer 记录 ---"
+  dmesg 2>/dev/null | grep -i 'out of memory' | tail -5 || journalctl -k 2>/dev/null | grep -i oom | tail -5 || echo "无 OOM 记录"
+  {% endif %}
+  echo "===== 诊断完成 ====="

@@ -1,0 +1,64 @@
+name: ufw_firewall
+title: UFW 防火墙配置
+description: 配置 UFW 防火墙规则，开放常用端口
+icon: 🔥
+category: security
+
+questions:
+  - name: ssh_port
+    label: SSH 端口
+    type: int
+    default: 22
+    min: 1
+    max: 65535
+  - name: allow_http
+    label: 允许 HTTP (80)
+    type: bool
+    default: true
+  - name: allow_https
+    label: 允许 HTTPS (443)
+    type: bool
+    default: true
+  - name: custom_ports
+    label: 自定义端口
+    type: string
+    default: "8080,3306"
+    help: 逗号分隔
+  - name: allow_from
+    label: 限制来源 IP
+    type: string
+    default: ""
+    help: 留空允许所有，如 10.0.0.0/8
+  - name: enable
+    label: 立即启用
+    type: bool
+    default: true
+
+computed:
+  port_list: "[p.strip() for p in custom_ports.split(',') if p.strip()]"
+
+script: |
+  #!/bin/bash
+  set -euo pipefail
+  apt-get install -y ufw
+  ufw --force reset
+  ufw default deny incoming
+  ufw default allow outgoing
+  FROM=""
+  {% if allow_from %}
+  FROM="from {{ allow_from }}"
+  {% endif %}
+  ufw allow $FROM {{ ssh_port }}/tcp comment 'SSH'
+  {% if allow_http %}
+  ufw allow $FROM 80/tcp comment 'HTTP'
+  {% endif %}
+  {% if allow_https %}
+  ufw allow $FROM 443/tcp comment 'HTTPS'
+  {% endif %}
+  {% for port in port_list %}
+  ufw allow $FROM {{ port }}/tcp comment 'Custom {{ port }}'
+  {% endfor %}
+  {% if enable %}
+  ufw --force enable
+  {% endif %}
+  ufw status verbose

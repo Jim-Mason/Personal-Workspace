@@ -1,0 +1,104 @@
+name: nginx
+title: Nginx 安装配置
+description: Ubuntu 系统 Nginx 安装脚本，支持 HTTPS 与 Let's Encrypt 自动证书
+icon: 🌐
+category: deploy
+tags: [nginx, web, ssl, deploy]
+
+questions:
+  - name: port
+    label: 监听端口
+    type: int
+    default: 80
+    min: 1
+    max: 65535
+    required: true
+    help: Nginx 对外监听的 HTTP 端口
+
+  - name: enable_https
+    label: 启用 HTTPS
+    type: bool
+    default: true
+    help: 是否配置 SSL 证书并启用 HTTPS
+
+  - name: domain
+    label: 域名
+    type: string
+    default: example.com
+    required: true
+    pattern: "^[a-zA-Z0-9][a-zA-Z0-9.-]*\\.[a-zA-Z]{2,}$"
+    show_when:
+      enable_https: true
+    help: 用于 SSL 证书和虚拟主机配置
+
+  - name: email
+    label: Let's Encrypt 邮箱
+    type: string
+    default: admin@example.com
+    required: true
+    show_when:
+      enable_https: true
+    help: 证书到期提醒邮箱
+
+computed:
+  domain_prefix: "domain.split('.')[0]"
+  ssl_port: "443 if enable_https else port"
+
+script: |
+  #!/bin/bash
+  # Nginx 安装与配置脚本 - 自动生成
+  # 域名: {{ domain if enable_https else 'N/A' }}
+  set -euo pipefail
+
+  echo "==> 更新软件包索引..."
+  sudo apt-get update -y
+
+  echo "==> 安装 Nginx..."
+  sudo apt-get install -y nginx
+
+  echo "==> 配置防火墙..."
+  sudo ufw allow '{{ port }}/tcp' || true
+  {% if enable_https %}
+  sudo ufw allow '{{ ssl_port }}/tcp' || true
+  {% endif %}
+
+  SITE_CONF="/etc/nginx/sites-available/{{ domain_prefix if enable_https else 'default' }}"
+  sudo tee "$SITE_CONF" > /dev/null <<'NGINX_EOF'
+  server {
+      listen {{ port }};
+      server_name {{ domain if enable_https else '_' }};
+      root /var/www/html;
+      index index.html index.htm;
+
+      location / {
+          try_files $uri $uri/ =404;
+      }
+
+      access_log /var/log/nginx/{{ domain_prefix if enable_https else 'default' }}_access.log;
+      error_log  /var/log/nginx/{{ domain_prefix if enable_https else 'default' }}_error.log;
+  }
+  NGINX_EOF
+
+  sudo ln -sf "$SITE_CONF" /etc/nginx/sites-enabled/
+  sudo nginx -t
+  sudo systemctl enable nginx
+  sudo systemctl restart nginx
+
+  {% if enable_https %}
+  echo "==> 安装 Certbot..."
+  sudo apt-get install -y certbot python3-certbot-nginx
+
+  echo "==> 申请 SSL 证书..."
+  sudo certbot --nginx \
+    --non-interactive \
+    --agree-tos \
+    --email {{ email }} \
+    -d {{ domain }} \
+    --redirect
+
+  echo "==> HTTPS 已启用，监听端口 {{ ssl_port }}"
+  {% else %}
+  echo "==> Nginx 已启动，监听端口 {{ port }}"
+  {% endif %}
+
+  echo "==> 完成！访问 http{% if enable_https %}s{% endif %}://{{ domain if enable_https else 'localhost' }}:{{ port if not enable_https else ssl_port }}"

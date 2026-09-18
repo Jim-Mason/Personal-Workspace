@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+
+{% block title %}仪表盘{% endblock %}
+
+{% block content %}
+<section class="dashboard-page">
+  <div class="section-header">
+    <h1>📊 使用概览</h1>
+    <a href="{{ url_for('index') }}" class="btn btn-ghost btn-sm">返回模板</a>
+  </div>
+
+  <div class="stats-grid">
+    <div class="stat-card glass">
+      <span class="stat-value">{{ total_templates }}</span>
+      <span class="stat-label">可用模板</span>
+    </div>
+    <div class="stat-card glass">
+      <span class="stat-value">{{ stats.total_generations }}</span>
+      <span class="stat-label">累计生成</span>
+    </div>
+    <div class="stat-card glass">
+      <span class="stat-value">{{ stats.unique_templates }}</span>
+      <span class="stat-label">已使用模板</span>
+    </div>
+    <div class="stat-card glass">
+      <span class="stat-value">{{ favorites|length }}</span>
+      <span class="stat-label">收藏模板</span>
+    </div>
+  </div>
+
+  <div class="dashboard-grid">
+    <section class="glass dashboard-panel">
+      <h2>🔥 常用模板</h2>
+      {% if stats.top_templates %}
+      <div class="rank-list">
+        {% for item in stats.top_templates %}
+        <div class="rank-item">
+          <span class="rank-count">{{ item.count }}</span>
+          <div class="rank-info">
+            <strong>{{ item.title }}</strong>
+            <span>{{ item.template }}</span>
+          </div>
+          <a href="{{ url_for('template_form', name=item.template) }}" class="btn btn-sm btn-ghost">使用</a>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p class="empty-text">暂无生成记录，去创建一个脚本吧</p>
+      {% endif %}
+    </section>
+
+    <section class="glass dashboard-panel">
+      <h2>⭐ 我的收藏</h2>
+      {% if favorites %}
+      <div class="rank-list">
+        {% for tpl in favorites %}
+        <div class="rank-item">
+          <span class="rank-icon">{{ tpl.icon }}</span>
+          <div class="rank-info">
+            <strong>{{ tpl.title }}</strong>
+            <span>{{ tpl.category }}</span>
+          </div>
+          <a href="{{ url_for('template_form', name=tpl.name) }}" class="btn btn-sm btn-primary">生成</a>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p class="empty-text">在模板卡片上点击 ☆ 收藏常用模板</p>
+      {% endif %}
+    </section>
+  </div>
+
+  {% if stats.recent %}
+  <section class="section">
+    <div class="section-header">
+      <h2>🕐 最近生成</h2>
+      <a href="{{ url_for('history_page') }}" class="link-more">全部历史 →</a>
+    </div>
+    <div class="history-list glass">
+      {% for entry in stats.recent %}
+      <div class="history-item">
+        <div class="history-info">
+          <strong>{{ entry.title }}</strong>
+          <span class="history-time">{{ entry.created_at[:19] | replace('T', ' ') }}</span>
+        </div>
+        <div class="history-actions">
+          {% if entry.share_id %}
+          <a href="{{ url_for('result_page', entry_id=entry.share_id) }}" class="btn btn-sm btn-ghost">查看</a>
+          {% endif %}
+          <a href="{{ url_for('template_form', name=entry.template) }}" class="btn btn-sm btn-primary">再次生成</a>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+</section>
+{% endblock %}

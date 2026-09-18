@@ -1,0 +1,98 @@
+name: ansible_playbook
+title: Ansible Playbook 生成
+description: 生成 Ansible Playbook 部署 Web 应用
+icon: 🔧
+category: deploy
+
+questions:
+  - name: app_name
+    label: 应用名称
+    type: string
+    default: myapp
+    required: true
+  - name: target_hosts
+    label: 目标主机组
+    type: string
+    default: webservers
+  - name: deploy_user
+    label: 部署用户
+    type: string
+    default: deploy
+  - name: app_port
+    label: 应用端口
+    type: int
+    default: 8080
+    min: 1
+    max: 65535
+  - name: git_repo
+    label: Git 仓库
+    type: string
+    default: "https://github.com/user/repo.git"
+  - name: install_nginx
+    label: 安装 Nginx 反向代理
+    type: bool
+    default: true
+
+script: |
+  #!/bin/bash
+  # 使用生成的 playbook 部署:
+  # ansible-playbook -i inventory {{ app_name }}_deploy.yml
+  echo "请使用 extra_outputs 中的 Ansible 文件进行部署"
+
+extra_outputs:
+  - name: inventory
+    content: |
+      [{{ target_hosts }}]
+      # server1 ansible_host=192.168.1.10 ansible_user={{ deploy_user }}
+
+  - name: "{{ app_name }}_deploy.yml"
+    content: |
+      ---
+      - name: Deploy {{ app_name }}
+        hosts: {{ target_hosts }}
+        become: yes
+        vars:
+          app_name: {{ app_name }}
+          app_port: {{ app_port }}
+          git_repo: {{ git_repo }}
+        tasks:
+          - name: Install dependencies
+            apt:
+              name: [git, python3]
+              state: present
+
+          - name: Clone repository
+            git:
+              repo: "{{ git_repo }}"
+              dest: "/opt/{{ app_name }}"
+              version: main
+
+          - name: Start application
+            shell: "cd /opt/{{ app_name }} && nohup ./start.sh &"
+            become_user: {{ deploy_user }}
+      {% if install_nginx %}
+          - name: Install nginx
+            apt:
+              name: nginx
+              state: present
+
+          - name: Configure nginx proxy
+            copy:
+              content: |
+                server {
+                    listen 80;
+                    location / {
+                        proxy_pass http://127.0.0.1:{{ app_port }};
+                    }
+                }
+              dest: /etc/nginx/sites-available/{{ app_name }}
+            notify: reload nginx
+
+        handlers:
+          - name: reload nginx
+            service:
+              name: nginx
+              state: reloaded
+      {% endif %}
+
+primary_output: "{{ app_name }}_deploy.yml"

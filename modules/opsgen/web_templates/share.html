@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% block title %}分享 - {{ share.title }}{% endblock %}
+
+{% block content %}
+<section class="share-page">
+  <div class="result-header glass">
+    <h1>📎 {{ share.title }}</h1>
+    <p>由 OpsGen 生成的运维脚本 · {{ share.created_at[:19] | replace('T', ' ') }}</p>
+  </div>
+
+  <div class="output-tabs glass">
+    {% for filename in share.outputs.keys() %}
+    <button class="tab-btn {% if loop.first %}active{% endif %}" data-tab="{{ filename }}">{{ filename }}</button>
+    {% endfor %}
+  </div>
+
+  {% for filename, content in share.outputs.items() %}
+  <div class="code-panel glass {% if loop.first %}active{% endif %}" data-panel="{{ filename }}">
+    <div class="code-toolbar">
+      <span class="code-filename">{{ filename }}</span>
+      <div class="code-actions">
+        <button class="btn btn-sm btn-ghost" onclick="OpsGen.copyCode('code-{{ filename | replace('.', '-') }}')">📋 复制</button>
+        <a href="{{ url_for('download_script', share_id=share.id, filename=filename) }}" class="btn btn-sm btn-primary">⬇️ 下载</a>
+      </div>
+    </div>
+    <pre><code id="code-{{ filename | replace('.', '-') }}" class="language-bash">{{ content }}</code></pre>
+  </div>
+  {% endfor %}
+
+  <div class="share-actions glass">
+    <a href="{{ url_for('template_form', name=share.template) }}?{% for k,v in share.params.items() %}{{ k }}={{ v }}&{% endfor %}" class="btn btn-primary">🔄 重新生成</a>
+    <a href="{{ url_for('index') }}" class="btn btn-ghost">返回首页</a>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    OpsGen.initTabs();
+    OpsGen.highlightAll();
+  });
+</script>
+{% endblock %}

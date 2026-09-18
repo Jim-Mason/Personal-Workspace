@@ -1,0 +1,49 @@
+name: mount_disk
+title: 磁盘挂载
+description: 格式化并挂载新磁盘，写入 fstab 持久化
+icon: 📀
+category: deploy
+
+questions:
+  - name: device
+    label: 设备路径
+    type: string
+    default: /dev/sdb1
+    required: true
+  - name: mount_point
+    label: 挂载点
+    type: string
+    default: /data
+    required: true
+  - name: filesystem
+    label: 文件系统
+    type: choice
+    choices: [ext4, xfs, btrfs]
+    default: ext4
+  - name: format_disk
+    label: 格式化磁盘
+    type: bool
+    default: false
+    help: 危险操作！会清除数据
+  - name: mount_options
+    label: 挂载选项
+    type: string
+    default: defaults,noatime
+
+script: |
+  #!/bin/bash
+  set -euo pipefail
+  DEV="{{ device }}"
+  MNT="{{ mount_point }}"
+  FS="{{ filesystem }}"
+  if [ ! -b "$DEV" ]; then echo "错误: $DEV 不存在"; exit 1; fi
+  {% if format_disk %}
+  echo "WARNING: 格式化 $DEV 为 $FS"
+  mkfs -t "$FS" "$DEV"
+  {% endif %}
+  mkdir -p "$MNT"
+  mount -o {{ mount_options }} "$DEV" "$MNT"
+  UUID=$(blkid -s UUID -o value "$DEV")
+  grep -q "$UUID" /etc/fstab || echo "UUID=$UUID $MNT $FS {{ mount_options }} 0 2" >> /etc/fstab
+  df -h "$MNT"
+  echo "==> 挂载完成: $DEV -> $MNT"

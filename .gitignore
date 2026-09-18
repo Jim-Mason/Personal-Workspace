@@ -1,0 +1,59 @@
+# 运行时数据（数据库、令牌、机器标识都在这里）
+# ⚠️ 里面既有你的真实数据，也可能含内网地址，绝不能提交
+data/
+
+# 私有运行环境
+.venv/
+venv/
+env/
+# 模块各自的私有 venv（modules/<id>/.venv）。约定放在模块目录下，
+# 这样搬走一个模块目录，它的依赖边界也跟着走。
+modules/*/.venv/
+
+# 模块自己的运行时数据（各模块数据各归各家）
+# 例如 modules/portal/data/ 的门户库、modules/filelist/data/ 的书库配置
+modules/*/data/
+
+# 模块的前端依赖与构建产物
+# （modules/portal/.gitignore 里已有一份更细的规则，这里再兜一层，
+#   免得哪天某个模块忘了写自己的 .gitignore）
+node_modules/
+modules/*/frontend/node_modules/
+
+# 密钥与本地配置：.env.example 要提交，真实 .env 绝不能提交
+.env
+.env.local
+.env.*.local
+modules/*/.env
+modules/*/backend/.env
+!modules/*/.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# 日志
+*.log
+logs/
+
+# 编辑器
+.vscode/
+.idea/
+*.swp
+
+# 系统
+Thumbs.db
+Desktop.ini
+
+# 开发过程中的临时探针目录（agent/调试产物，不属于源码）
+.probe/
+.tmp_probe/
+.shot/
+
+# 模块开发期留下的实拍截图：**不进版本库**
+#
+# 它们拍摄时用的是真实的卡片数据 —— 内网系统的名称与地址都在画面里，
+# 不适合公开。文件留在本机自己看即可；要看实际效果，跑起来会自动灌一组示例卡片。
+modules/*/docs/screenshots/

@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+
+{% block title %}批量生成结果{% endblock %}
+
+{% block content %}
+<section class="batch-result-page">
+  <div class="section-header">
+    <h1>📦 批量生成完成</h1>
+    <a href="{{ url_for('batch_page') }}" class="btn btn-ghost btn-sm">再次批量生成</a>
+  </div>
+
+  <div class="stats-grid">
+    <div class="stat-card glass">
+      <span class="stat-value">{{ batch.count }}</span>
+      <span class="stat-label">总计</span>
+    </div>
+    <div class="stat-card glass">
+      <span class="stat-value">{{ batch.success }}</span>
+      <span class="stat-label">成功</span>
+    </div>
+    <div class="stat-card glass">
+      <span class="stat-value">{{ batch.count - batch.success }}</span>
+      <span class="stat-label">失败</span>
+    </div>
+  </div>
+
+  <div class="result-toolbar glass">
+    <a href="{{ url_for('download_batch_zip', batch_id=batch.id) }}" class="btn btn-primary">📦 下载全部 ZIP</a>
+  </div>
+
+  <div class="batch-result-list">
+    {% for item in batch.results %}
+    <div class="batch-result-item glass {% if not item.ok %}failed{% endif %}">
+      <div class="batch-result-head">
+        <strong>{% if item.ok %}{{ item.title }}{% else %}{{ item.template }}{% endif %}</strong>
+        <span class="card-badge {% if item.ok %}custom{% else %}failed-badge{% endif %}">
+          {% if item.ok %}成功{% else %}失败{% endif %}
+        </span>
+      </div>
+      {% if item.ok %}
+      <div class="batch-result-actions">
+        {% if item.share_id %}
+        <a href="{{ url_for('result_page', entry_id=item.share_id) }}" class="btn btn-sm btn-primary">查看脚本</a>
+        <a href="{{ url_for('download_bundle', share_id=item.share_id) }}" class="btn btn-sm btn-ghost">下载</a>
+        {% endif %}
+      </div>
+      {% else %}
+      <p class="error-text">{{ item.error }}</p>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,59 @@
+name: ssh_hardening
+title: SSH 安全加固
+description: SSH 端口、密钥登录、禁用 root 等安全配置
+icon: 🔐
+category: security
+
+questions:
+  - name: ssh_port
+    label: SSH 端口
+    type: int
+    default: 2222
+    min: 1
+    max: 65535
+    required: true
+  - name: disable_root
+    label: 禁止 root 登录
+    type: bool
+    default: true
+  - name: password_auth
+    label: 允许密码登录
+    type: bool
+    default: false
+  - name: max_auth_tries
+    label: 最大认证次数
+    type: int
+    default: 3
+    min: 1
+    max: 10
+  - name: idle_timeout
+    label: 空闲超时 (秒)
+    type: int
+    default: 300
+    min: 60
+    max: 3600
+  - name: allow_users
+    label: 允许的用户
+    type: string
+    default: ops,deploy
+    help: 逗号分隔，留空不限制
+
+computed:
+  user_list: "[u.strip() for u in allow_users.split(',') if u.strip()]"
+
+script: |
+  #!/bin/bash
+  set -euo pipefail
+  cp /etc/ssh/sshd_config /etc/ssh/sshd_config.bak.$(date +%Y%m%d)
+  sed -i 's/^#\?Port .*/Port {{ ssh_port }}/' /etc/ssh/sshd_config
+  sed -i 's/^#\?PermitRootLogin .*/PermitRootLogin {% if disable_root %}no{% else %}yes{% endif %}/' /etc/ssh/sshd_config
+  sed -i 's/^#\?PasswordAuthentication .*/PasswordAuthentication {% if password_auth %}yes{% else %}no{% endif %}/' /etc/ssh/sshd_config
+  sed -i 's/^#\?MaxAuthTries .*/MaxAuthTries {{ max_auth_tries }}/' /etc/ssh/sshd_config
+  sed -i 's/^#\?ClientAliveInterval .*/ClientAliveInterval {{ idle_timeout }}/' /etc/ssh/sshd_config
+  sed -i 's/^#\?ClientAliveCountMax .*/ClientAliveCountMax 2/' /etc/ssh/sshd_config
+  {% if user_list %}
+  echo "AllowUsers {{ user_list | join(' ') }}" >> /etc/ssh/sshd_config
+  {% endif %}
+  sshd -t && systemctl restart sshd
+  echo "==> SSH 已加固，端口 {{ ssh_port }}"
+  echo "WARNING: 请确保防火墙已放行 {{ ssh_port }}/tcp"

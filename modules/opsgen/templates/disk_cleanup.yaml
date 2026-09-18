@@ -1,0 +1,62 @@
+name: disk_cleanup
+title: 磁盘空间清理
+description: 清理 apt 缓存、临时文件、旧内核与 Docker 缓存
+icon: 💿
+category: maintenance
+
+questions:
+  - name: clean_apt
+    label: 清理 APT 缓存
+    type: bool
+    default: true
+  - name: clean_tmp
+    label: 清理 /tmp (7天前)
+    type: bool
+    default: true
+  - name: clean_old_kernels
+    label: 清理旧内核
+    type: bool
+    default: true
+  - name: clean_docker
+    label: 清理 Docker 缓存
+    type: bool
+    default: false
+  - name: clean_journal
+    label: 清理 systemd 日志
+    type: bool
+    default: true
+  - name: journal_days
+    label: 日志保留天数
+    type: int
+    default: 7
+    min: 1
+    max: 90
+    show_when:
+      clean_journal: true
+  - name: dry_run
+    label: 试运行
+    type: bool
+    default: false
+
+script: |
+  #!/bin/bash
+  set -euo pipefail
+  DRY={% if dry_run %}true{% else %}false{% endif %}
+  run() { if [ "$DRY" = true ]; then echo "[DRY] $*"; else eval "$@"; fi; }
+  echo "==> 清理前: $(df -h / | awk 'NR==2{print $5}')"
+  {% if clean_apt %}
+  run "apt-get clean && apt-get autoremove -y"
+  {% endif %}
+  {% if clean_tmp %}
+  run "find /tmp -type f -atime +7 -delete 2>/dev/null || true"
+  {% endif %}
+  {% if clean_old_kernels %}
+  run "apt-get autoremove --purge -y 2>/dev/null || true"
+  {% endif %}
+  {% if clean_docker %}
+  run "docker system prune -af 2>/dev/null || true"
+  {% endif %}
+  {% if clean_journal %}
+  run "journalctl --vacuum-time={{ journal_days }}d"
+  {% endif %}
+  echo "==> 清理后: $(df -h / | awk 'NR==2{print $5}')"

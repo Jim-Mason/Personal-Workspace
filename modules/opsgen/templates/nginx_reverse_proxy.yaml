@@ -1,0 +1,95 @@
+name: nginx_reverse_proxy
+title: Nginx 反向代理
+description: 配置 Nginx 反向代理到后端服务，支持 WebSocket 与负载均衡
+icon: 🔀
+category: deploy
+
+questions:
+  - name: domain
+    label: 域名
+    type: string
+    default: app.example.com
+    required: true
+  - name: backend
+    label: 后端地址
+    type: string
+    default: "127.0.0.1:3000"
+    required: true
+    help: IP:PORT 或 upstream 名称
+  - name: enable_ssl
+    label: 启用 SSL
+    type: bool
+    default: false
+  - name: ssl_cert
+    label: SSL 证书路径
+    type: string
+    default: /etc/ssl/certs/app.crt
+    show_when:
+      enable_ssl: true
+  - name: ssl_key
+    label: SSL 私钥路径
+    type: string
+    default: /etc/ssl/private/app.key
+    show_when:
+      enable_ssl: true
+  - name: websocket
+    label: 支持 WebSocket
+    type: bool
+    default: false
+  - name: client_max_body
+    label: 最大上传 (MB)
+    type: int
+    default: 50
+    min: 1
+    max: 1024
+
+computed:
+  domain_prefix: "domain.split('.')[0]"
+
+script: |
+  #!/bin/bash
+  set -euo pipefail
+  CONF="/etc/nginx/sites-available/{{ domain_prefix }}"
+  cat > "$CONF" <<'NGINX_EOF'
+  {% if enable_ssl %}
+  server {
+      listen 443 ssl http2;
+      server_name {{ domain }};
+      ssl_certificate {{ ssl_cert }};
+      ssl_certificate_key {{ ssl_key }};
+      client_max_body_size {{ client_max_body }}m;
+      location / {
+          proxy_pass http://{{ backend }};
+          proxy_set_header Host $host;
+          proxy_set_header X-Real-IP $remote_addr;
+          proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+          proxy_set_header X-Forwarded-Proto $scheme;
+  {% if websocket %}
+          proxy_http_version 1.1;
+          proxy_set_header Upgrade $http_upgrade;
+          proxy_set_header Connection "upgrade";
+  {% endif %}
+      }
+  }
+  {% else %}
+  server {
+      listen 80;
+      server_name {{ domain }};
+      client_max_body_size {{ client_max_body }}m;
+      location / {
+          proxy_pass http://{{ backend }};
+          proxy_set_header Host $host;
+          proxy_set_header X-Real-IP $remote_addr;
+          proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+  {% if websocket %}
+          proxy_http_version 1.1;
+          proxy_set_header Upgrade $http_upgrade;
+          proxy_set_header Connection "upgrade";
+  {% endif %}
+      }
+  }
+  {% endif %}
+  NGINX_EOF
+  ln -sf "$CONF" /etc/nginx/sites-enabled/
+  nginx -t && systemctl reload nginx
+  echo "==> 反向代理已配置: {{ domain }} -> {{ backend }}"

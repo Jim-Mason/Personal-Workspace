@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+
+{% block title %}版本历史 - {{ template.title }}{% endblock %}
+
+{% block content %}
+<section class="versions-page">
+  <div class="form-header glass">
+    <a href="{{ url_for('template_edit', name=template.name) }}" class="back-link">← 返回编辑</a>
+    <h1>📚 {{ template.title }} · 版本历史</h1>
+    <p>自定义模板每次保存前会自动备份，最多保留 20 个版本</p>
+  </div>
+
+  {% if versions %}
+  <div class="glass version-list">
+    <div class="version-row version-head">
+      <span>版本 ID</span>
+      <span>保存时间</span>
+      <span>说明</span>
+      <span>操作</span>
+    </div>
+    <div class="version-row">
+      <span><code>current</code></span>
+      <span>当前版本</span>
+      <span>正在使用的模板</span>
+      <span class="version-actions">
+        {% if versions %}
+        <a href="{{ url_for('compare_page', mode='template', name=template.name, v1='current', v2=versions[0].id) }}"
+           class="btn btn-sm btn-ghost">与最新备份对比</a>
+        {% endif %}
+      </span>
+    </div>
+    {% for ver in versions %}
+    <div class="version-row">
+      <span><code>{{ ver.id }}</code></span>
+      <span>{{ ver.created_at[:19] | replace('T', ' ') }}</span>
+      <span>{{ ver.note }}</span>
+      <span class="version-actions">
+        <a href="{{ url_for('compare_page', mode='template', name=template.name, v1=ver.id, v2='current') }}"
+           class="btn btn-sm btn-primary">对比当前</a>
+        {% if not loop.last %}
+        <a href="{{ url_for('compare_page', mode='template', name=template.name, v1=versions[loop.index0 + 1].id, v2=ver.id) }}"
+           class="btn btn-sm btn-ghost">与上一版</a>
+        {% endif %}
+      </span>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty-state glass">
+    <p>暂无版本备份，编辑保存后将自动创建</p>
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

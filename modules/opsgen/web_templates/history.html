@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+
+{% block title %}历史记录{% endblock %}
+
+{% block content %}
+<section class="history-page">
+  <div class="section-header">
+    <h1>🕐 历史记录</h1>
+    <div class="section-header-actions">
+      <span class="badge">{{ pagination.total }} 条</span>
+      {% if pagination.total %}
+      <form method="POST" action="{{ url_for('history_clear') }}" onsubmit="return confirm('确定清空全部历史？')">
+        <button type="submit" class="btn btn-sm btn-danger">清空</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <form class="template-toolbar glass" method="GET" action="{{ url_for('history_page') }}">
+    <div class="toolbar-row">
+      <div class="search-box">
+        <span class="search-icon">🔍</span>
+        <input type="search" name="q" class="form-input" placeholder="搜索模板或标题..." value="{{ query }}">
+      </div>
+      <button type="submit" class="btn btn-ghost">搜索</button>
+      <a href="{{ url_for('history_page') }}" class="btn btn-ghost">重置</a>
+    </div>
+  </form>
+
+  {% if history %}
+  <div class="history-table glass">
+    {% for entry in history %}
+    <div class="history-row">
+      <div class="history-main">
+        <strong>{{ entry.title }}</strong>
+        <span class="history-meta">{{ entry.template }} · {{ entry.created_at[:19] | replace('T', ' ') }}</span>
+      </div>
+      <div class="history-params">
+        {% for k, v in entry.params.items() %}
+        <span class="param-tag">{{ k }}={{ v }}</span>
+        {% endfor %}
+      </div>
+      <div class="history-actions">
+        {% if entry.share_id %}
+        <a href="{{ url_for('result_page', entry_id=entry.share_id) }}" class="btn btn-sm btn-ghost">查看</a>
+        {% endif %}
+        <a href="{{ url_for('template_form', name=entry.template) }}" class="btn btn-sm btn-primary">再次生成</a>
+        <a href="{{ url_for('compare_page', mode='history', id1=entry.id, id2=entry.id) }}"
+           class="btn btn-sm btn-ghost compare-link" data-id="{{ entry.id }}" title="选为对比基准">🔀</a>
+        <form method="POST" action="{{ url_for('history_delete', entry_id=entry.id) }}">
+          <button type="submit" class="btn btn-sm btn-danger">删除</button>
+        </form>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  {% if pagination.pages > 1 %}
+  <nav class="pagination glass">
+    {% if pagination.page > 1 %}
+    <a class="page-btn" href="{{ url_for('history_page', q=query, page=pagination.page - 1) }}">‹</a>
+    {% else %}
+    <span class="page-btn disabled">‹</span>
+    {% endif %}
+    <span class="page-info">{{ pagination.page }}/{{ pagination.pages }}</span>
+    {% if pagination.page < pagination.pages %}
+    <a class="page-btn" href="{{ url_for('history_page', q=query, page=pagination.page + 1) }}">›</a>
+    {% else %}
+    <span class="page-btn disabled">›</span>
+    {% endif %}
+  </nav>
+  {% endif %}
+
+  {% else %}
+  <div class="empty-state glass">
+    <p>暂无历史记录，去 <a href="{{ url_for('index') }}">选择一个模板</a> 开始生成吧</p>
+  </div>
+  {% endif %}
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  let picked = null;
+  document.querySelectorAll('.compare-link').forEach((link) => {
+    link.addEventListener('click', (e) => {
+      e.preventDefault();
+      const id = link.dataset.id;
+      if (!picked) {
+        picked = id;
+        link.classList.add('active');
+        OpsGen._toast('已选 A，请再选 B');
+      } else if (picked === id) {
+        picked = null;
+        link.classList.remove('active');
+      } else {
+        window.location.href = {{ url_for('compare_page') | tojson }} + `?mode=history&id1=${picked}&id2=${id}`;
+      }
+    });
+  });
+});
+</script>
+{% endblock %}

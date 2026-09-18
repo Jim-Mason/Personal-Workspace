@@ -1,0 +1,63 @@
+name: minio_install
+title: MinIO 对象存储
+description: 安装 MinIO 服务端并配置 systemd
+icon: 📦
+category: deploy
+
+questions:
+  - name: data_dir
+    label: 数据目录
+    type: string
+    default: /data/minio
+    required: true
+  - name: api_port
+    label: API 端口
+    type: int
+    default: 9000
+    min: 1
+    max: 65535
+  - name: console_port
+    label: 控制台端口
+    type: int
+    default: 9001
+    min: 1
+    max: 65535
+  - name: root_user
+    label: Root 用户名
+    type: string
+    default: minioadmin
+  - name: root_password
+    label: Root 密码
+    type: string
+    default: minioadmin123
+    required: true
+
+script: |
+  #!/bin/bash
+  set -euo pipefail
+  curl -sL https://dl.min.io/server/minio/release/linux-amd64/minio -o /usr/local/bin/minio
+  curl -sL https://dl.min.io/client/mc/release/linux-amd64/mc -o /usr/local/bin/mc
+  chmod +x /usr/local/bin/minio /usr/local/bin/mc
+  useradd -r minio -s /sbin/nologin 2>/dev/null || true
+  mkdir -p {{ data_dir }} && chown minio:minio {{ data_dir }}
+  cat > /etc/default/minio <<EOF
+  MINIO_ROOT_USER={{ root_user }}
+  MINIO_ROOT_PASSWORD={{ root_password }}
+  MINIO_VOLUMES="{{ data_dir }}"
+  MINIO_OPTS="--address :{{ api_port }} --console-address :{{ console_port }}"
+  EOF
+  cat > /etc/systemd/system/minio.service <<EOF
+  [Unit]
+  Description=MinIO
+  After=network.target
+  [Service]
+  User=minio
+  EnvironmentFile=/etc/default/minio
+  ExecStart=/usr/local/bin/minio server \$MINIO_OPTS \$MINIO_VOLUMES
+  Restart=always
+  [Install]
+  WantedBy=multi-user.target
+  EOF
+  systemctl daemon-reload && systemctl enable --now minio
+  echo "==> MinIO API: http://localhost:{{ api_port }}"
+  echo "==> 控制台: http://localhost:{{ console_port }}"

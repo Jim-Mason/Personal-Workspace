@@ -1,0 +1,59 @@
+name: git_deploy
+title: Git 拉取部署
+description: 从 Git 仓库拉取代码并执行部署命令
+icon: 📦
+category: deploy
+
+questions:
+  - name: repo_url
+    label: Git 仓库 URL
+    type: string
+    default: "https://github.com/user/repo.git"
+    required: true
+  - name: branch
+    label: 分支
+    type: string
+    default: main
+  - name: deploy_dir
+    label: 部署目录
+    type: string
+    default: /opt/app
+    required: true
+  - name: deploy_user
+    label: 部署用户
+    type: string
+    default: deploy
+  - name: post_deploy
+    label: 部署后命令
+    type: string
+    default: "npm ci && npm run build && systemctl restart myapp"
+    help: 在部署目录执行的命令
+  - name: add_hook
+    label: 生成 Webhook 接收脚本
+    type: bool
+    default: false
+
+script: |
+  #!/bin/bash
+  set -euo pipefail
+  REPO="{{ repo_url }}"
+  DIR="{{ deploy_dir }}"
+  BRANCH="{{ branch }}"
+  if [ ! -d "$DIR/.git" ]; then
+    git clone -b "$BRANCH" "$REPO" "$DIR"
+  else
+    cd "$DIR" && git fetch origin && git checkout "$BRANCH" && git pull origin "$BRANCH"
+  fi
+  cd "$DIR"
+  chown -R {{ deploy_user }}:{{ deploy_user }} "$DIR"
+  su - {{ deploy_user }} -c "cd $DIR && {{ post_deploy }}"
+  echo "==> 部署完成 $(date) $(git rev-parse --short HEAD)"
+
+extra_outputs:
+  - name: webhook_receiver.sh
+    content: |
+      #!/bin/bash
+      # Webhook 触发部署（需配置 nginx/caddy 转发）
+      {{ post_deploy }}
+      cd {{ deploy_dir }} && git pull origin {{ branch }}
+      su - {{ deploy_user }} -c "cd {{ deploy_dir }} && {{ post_deploy }}"

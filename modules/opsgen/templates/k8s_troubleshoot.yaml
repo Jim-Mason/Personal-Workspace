@@ -1,0 +1,61 @@
+name: k8s_troubleshoot
+title: Kubernetes 排查
+description: kubectl 集群健康检查与常见问题诊断
+icon: ☸️
+category: diagnose
+
+questions:
+  - name: namespace
+    label: 命名空间
+    type: string
+    default: default
+  - name: check_all_ns
+    label: 检查所有命名空间
+    type: bool
+    default: false
+  - name: pod_name
+    label: 指定 Pod 名称
+    type: string
+    default: ""
+    help: 留空检查全部异常 Pod
+  - name: show_events
+    label: 显示 Events
+    type: bool
+    default: true
+  - name: show_logs
+    label: 显示 Pod 日志
+    type: bool
+    default: false
+
+script: |
+  #!/bin/bash
+  NS="{{ namespace }}"
+  {% if check_all_ns %}
+  NS_FLAG="--all-namespaces"
+  {% else %}
+  NS_FLAG="-n $NS"
+  {% endif %}
+  echo "===== Kubernetes 诊断 ====="
+  echo "--- 集群信息 ---"
+  kubectl cluster-info 2>/dev/null || { echo "kubectl 不可用"; exit 1; }
+  echo "--- 节点状态 ---"
+  kubectl get nodes -o wide
+  echo "--- 异常 Pod ---"
+  kubectl get pods $NS_FLAG --field-selector=status.phase!=Running,status.phase!=Succeeded 2>/dev/null
+  echo "--- Pod 详情 ---"
+  {% if pod_name %}
+  kubectl describe pod {{ pod_name }} $NS_FLAG
+  {% else %}
+  kubectl get pods $NS_FLAG | grep -v Running | grep -v Completed | tail -n +2 | awk '{print $1}' | while read p; do
+    kubectl describe pod $p $NS_FLAG | tail -20
+  done
+  {% endif %}
+  {% if show_events %}
+  echo "--- 最近 Events ---"
+  kubectl get events $NS_FLAG --sort-by='.lastTimestamp' | tail -15
+  {% endif %}
+  {% if show_logs and pod_name %}
+  echo "--- Pod 日志 ---"
+  kubectl logs {{ pod_name }} $NS_FLAG --tail=50
+  {% endif %}
+  echo "===== 诊断完成 ====="

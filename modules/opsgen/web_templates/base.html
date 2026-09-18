@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script>
+    (function () {
+      var theme = localStorage.getItem('opsgen-theme') || 'dark';
+      document.documentElement.setAttribute('data-theme', theme);
+    })();
+  </script>
+  <title>{% block title %}OpsGen{% endblock %} - 运维脚本生成器</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <link id="hljs-theme" rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+  {% block head %}{% endblock %}
+</head>
+<body>
+  <div class="bg-gradient"></div>
+  <div class="bg-orbs">
+    <span class="orb orb-1"></span>
+    <span class="orb orb-2"></span>
+    <span class="orb orb-3"></span>
+  </div>
+
+  <nav class="navbar glass">
+    <a href="{{ url_for('index') }}" class="nav-brand">
+      <span class="brand-icon">⚡</span>
+      <span>OpsGen</span>
+    </a>
+    <div class="nav-links">
+      <a href="{{ url_for('index') }}" class="nav-link">模板</a>
+      <a href="{{ url_for('batch_page') }}" class="nav-link">批量生成</a>
+      <a href="{{ url_for('compare_page') }}" class="nav-link">版本对比</a>
+      <a href="{{ url_for('dashboard') }}" class="nav-link">仪表盘</a>
+      <a href="{{ url_for('history_page') }}" class="nav-link">历史</a>
+      <button type="button" id="theme-toggle" class="theme-toggle" title="切换主题">🌙</button>
+    </div>
+  </nav>
+
+  <main class="container">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="footer glass">
+    <p>OpsGen 运维脚本生成器 · 问答式交互 · 一键生成可执行脚本</p>
+  </footer>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/bash.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/yaml.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/dockerfile.min.js"></script>
+  <script src="{{ url_for('static', filename='js/theme.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

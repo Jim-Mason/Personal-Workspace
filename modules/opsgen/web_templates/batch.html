@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block title %}批量生成{% endblock %}
+
+{% block content %}
+<section class="batch-page">
+  <div class="section-header">
+    <h1>📦 批量生成</h1>
+    <span class="badge">最多 30 个</span>
+  </div>
+  <p class="page-desc">选择多个模板，使用默认参数一次性生成全部脚本，并打包下载 ZIP</p>
+
+  {% if error %}
+  <div class="alert alert-error glass">{{ error }}</div>
+  {% endif %}
+
+  <form method="POST" class="batch-form glass" id="batch-form">
+    <div class="batch-toolbar">
+      <button type="button" class="btn btn-sm btn-ghost" id="batch-select-all">全选</button>
+      <button type="button" class="btn btn-sm btn-ghost" id="batch-select-none">清空</button>
+      <button type="button" class="btn btn-sm btn-ghost" id="batch-select-fav">选收藏</button>
+      <span class="batch-count">已选 <strong id="selected-count">0</strong> 个</span>
+    </div>
+
+    <div class="batch-grid">
+      {% for tpl in templates %}
+      <label class="batch-item">
+        <input type="checkbox" name="templates" value="{{ tpl.name }}"
+               data-fav="{{ '1' if tpl.name in favorites else '0' }}">
+        <span class="batch-item-body">
+          <span class="batch-icon">{{ tpl.icon }}</span>
+          <strong>{{ tpl.title }}</strong>
+          <small>{{ tpl.category }} · {{ tpl.name }}</small>
+        </span>
+      </label>
+      {% endfor %}
+    </div>
+
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary btn-lg">🚀 批量生成</button>
+    </div>
+  </form>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const form = document.getElementById('batch-form');
+  const boxes = form.querySelectorAll('input[name="templates"]');
+  const countEl = document.getElementById('selected-count');
+  const updateCount = () => {
+    countEl.textContent = form.querySelectorAll('input[name="templates"]:checked').length;
+  };
+  boxes.forEach((box) => box.addEventListener('change', updateCount));
+  document.getElementById('batch-select-all')?.addEventListener('click', () => {
+    boxes.forEach((b) => { b.checked = true; });
+    updateCount();
+  });
+  document.getElementById('batch-select-none')?.addEventListener('click', () => {
+    boxes.forEach((b) => { b.checked = false; });
+    updateCount();
+  });
+  document.getElementById('batch-select-fav')?.addEventListener('click', () => {
+    boxes.forEach((b) => { b.checked = b.dataset.fav === '1'; });
+    updateCount();
+  });
+  updateCount();
+});
+</script>
+{% endblock %}

@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+
+{% block title %}首页{% endblock %}
+
+{% block content %}
+<section class="hero hero-compact">
+  <h1 class="hero-title">运维脚本生成器</h1>
+  <p class="hero-subtitle">问答式交互 · 实时预览 · 一键生成 · 自定义模板</p>
+  <div class="hero-actions">
+    <a href="{{ url_for('template_create') }}" class="btn btn-primary btn-sm">＋ 添加模板</a>
+    <a href="{{ url_for('batch_page') }}" class="btn btn-ghost btn-sm">📦 批量生成</a>
+    <a href="{{ url_for('dashboard') }}" class="btn btn-ghost btn-sm">📊 仪表盘</a>
+    <a href="{{ url_for('index', fav='1') }}" class="btn btn-ghost btn-sm">⭐ 收藏</a>
+  </div>
+</section>
+
+<section class="section">
+  <div class="section-header">
+    <h2>📋 模板列表</h2>
+    <span class="badge" id="template-count">{{ pagination.total }} 个</span>
+  </div>
+
+  <form class="template-toolbar glass" method="GET" action="{{ url_for('index') }}" id="template-search-form">
+    <div class="toolbar-row">
+      <div class="search-box">
+        <span class="search-icon">🔍</span>
+        <input type="search" name="q" id="search-input" class="form-input"
+               placeholder="搜索名称、标签、描述..."
+               value="{{ filters.q }}">
+      </div>
+      <select name="category" id="category-filter" class="form-input toolbar-select" title="分类">
+        <option value="">全部分类</option>
+        {% for cat in categories %}
+        <option value="{{ cat }}" {% if filters.category == cat %}selected{% endif %}>{{ cat }}</option>
+        {% endfor %}
+      </select>
+      <select name="source" id="source-filter" class="form-input toolbar-select" title="来源">
+        <option value="">全部来源</option>
+        <option value="builtin" {% if filters.source == 'builtin' %}selected{% endif %}>内置</option>
+        <option value="custom" {% if filters.source == 'custom' %}selected{% endif %}>自定义</option>
+      </select>
+      <select name="sort" id="sort-filter" class="form-input toolbar-select" title="排序">
+        <option value="title" {% if filters.sort == 'title' %}selected{% endif %}>名称</option>
+        <option value="updated" {% if filters.sort == 'updated' %}selected{% endif %}>更新</option>
+        <option value="category" {% if filters.sort == 'category' %}selected{% endif %}>分类</option>
+        <option value="name" {% if filters.sort == 'name' %}selected{% endif %}>ID</option>
+      </select>
+      <select name="per_page" id="per-page" class="form-input toolbar-select" title="每页条数">
+        <option value="6" {% if filters.per_page == 6 %}selected{% endif %}>6条</option>
+        <option value="12" {% if filters.per_page == 12 %}selected{% endif %}>12条</option>
+        <option value="24" {% if filters.per_page == 24 %}selected{% endif %}>24条</option>
+      </select>
+      <label class="toolbar-check">
+        <input type="checkbox" name="fav" value="1" {% if filters.fav %}checked{% endif %}>
+        <span>收藏</span>
+      </label>
+      <button type="submit" class="btn btn-ghost">搜索</button>
+      <a href="{{ url_for('index') }}" class="btn btn-ghost">重置</a>
+    </div>
+  </form>
+
+  <div class="card-grid" id="template-grid">
+    {% for tpl in templates %}
+    <div class="template-card-wrap" data-template="{{ tpl.name }}">
+      <div class="card glass template-card">
+        <button type="button" class="favorite-btn {% if tpl.favorite %}active{% endif %}"
+                data-name="{{ tpl.name }}" title="收藏">{% if tpl.favorite %}★{% else %}☆{% endif %}</button>
+        <a href="{{ url_for('template_form', name=tpl.name) }}" class="card-link">
+          <div class="card-top">
+            <div class="card-icon">{{ tpl.icon }}</div>
+            {% if tpl.source == 'custom' %}
+            <span class="card-badge custom">自定义</span>
+            {% else %}
+            <span class="card-badge builtin">内置</span>
+            {% endif %}
+          </div>
+          <h3 class="card-title">{{ tpl.title }}</h3>
+          <p class="card-desc">{{ tpl.description }}</p>
+          <div class="card-tags">
+            <span class="card-tag">{{ tpl.category }}</span>
+            {% for tag in tpl.tags[:3] %}
+            <span class="card-tag tag-label">{{ tag }}</span>
+            {% endfor %}
+          </div>
+        </a>
+        <div class="card-quick-actions">
+          <a href="{{ url_for('template_quick', name=tpl.name) }}" class="btn btn-sm btn-accent" title="默认参数一键生成">⚡</a>
+          <a href="{{ url_for('template_preview_page', name=tpl.name) }}" class="btn btn-sm btn-ghost" title="预览">👁</a>
+          <a href="{{ url_for('template_export', name=tpl.name) }}" class="btn btn-sm btn-ghost" title="导出 YAML">⬇</a>
+          {% if tpl.source != 'custom' %}
+          <form method="POST" action="{{ url_for('template_fork', name=tpl.name) }}" class="inline-form">
+            <button type="submit" class="btn btn-sm btn-ghost" title="克隆为自定义">📋</button>
+          </form>
+          {% endif %}
+        </div>
+      </div>
+      {% if tpl.source == 'custom' %}
+      <div class="card-actions">
+        <a href="{{ url_for('template_edit', name=tpl.name) }}" class="btn btn-sm btn-ghost">编辑</a>
+        <form method="POST" action="{{ url_for('template_delete', name=tpl.name) }}"
+              onsubmit="return confirm('确定删除模板「{{ tpl.title }}」？')">
+          <button type="submit" class="btn btn-sm btn-danger">删除</button>
+        </form>
+      </div>
+      {% endif %}
+    </div>
+    {% else %}
+    <div class="empty-state glass" style="grid-column: 1 / -1;">
+      <p>没有找到匹配的模板</p>
+      <a href="{{ url_for('template_create') }}" class="btn btn-primary" style="margin-top: 1rem;">创建自定义模板</a>
+    </div>
+    {% endfor %}
+  </div>
+
+  {% if pagination.pages > 1 %}
+  <nav class="pagination glass" id="pagination">
+    {% if pagination.page > 1 %}
+    <a class="page-btn" href="{{ url_for('index', q=filters.q, category=filters.category, source=filters.source, sort=filters.sort, per_page=filters.per_page, fav=filters.fav, page=pagination.page - 1) }}">‹</a>
+    {% else %}
+    <span class="page-btn disabled">‹</span>
+    {% endif %}
+
+    {% for p in range(1, pagination.pages + 1) %}
+      {% if p == pagination.page %}
+      <span class="page-btn active">{{ p }}</span>
+      {% elif p == 1 or p == pagination.pages or (p >= pagination.page - 2 and p <= pagination.page + 2) %}
+      <a class="page-btn" href="{{ url_for('index', q=filters.q, category=filters.category, source=filters.source, sort=filters.sort, per_page=filters.per_page, fav=filters.fav, page=p) }}">{{ p }}</a>
+      {% elif p == pagination.page - 3 or p == pagination.page + 3 %}
+      <span class="page-ellipsis">…</span>
+      {% endif %}
+    {% endfor %}
+
+    {% if pagination.page < pagination.pages %}
+    <a class="page-btn" href="{{ url_for('index', q=filters.q, category=filters.category, source=filters.source, sort=filters.sort, per_page=filters.per_page, fav=filters.fav, page=pagination.page + 1) }}">›</a>
+    {% else %}
+    <span class="page-btn disabled">›</span>
+    {% endif %}
+    <span class="page-info">{{ pagination.page }}/{{ pagination.pages }}</span>
+  </nav>
+  {% endif %}
+</section>
+
+{% if history %}
+<section class="section">
+  <div class="section-header">
+    <h2>🕐 最近生成</h2>
+    <a href="{{ url_for('history_page') }}" class="link-more">查看全部 →</a>
+  </div>
+  <div class="history-list glass">
+    {% for entry in history[:5] %}
+    <div class="history-item">
+      <div class="history-info">
+        <strong>{{ entry.title }}</strong>
+        <span class="history-time">{{ entry.created_at[:19] | replace('T', ' ') }}</span>
+      </div>
+      <div class="history-actions">
+        {% if entry.share_id %}
+        <a href="{{ url_for('result_page', entry_id=entry.share_id) }}" class="btn btn-sm btn-ghost">查看</a>
+        {% endif %}
+        <a href="{{ url_for('template_form', name=entry.template) }}" class="btn btn-sm btn-primary">再次生成</a>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/templates.js') }}"></script>
+{% endblock %}

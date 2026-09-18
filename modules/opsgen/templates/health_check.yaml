@@ -1,0 +1,54 @@
+name: health_check
+title: HTTP 健康检查
+description: 批量 URL 健康探测，支持超时与状态码校验
+icon: 💓
+category: diagnose
+
+questions:
+  - name: urls
+    label: URL 列表
+    type: string
+    default: "https://example.com,https://api.example.com/health"
+    required: true
+    help: 逗号分隔
+  - name: timeout
+    label: 超时 (秒)
+    type: int
+    default: 10
+    min: 1
+    max: 120
+  - name: expected_code
+    label: 期望状态码
+    type: int
+    default: 200
+    min: 100
+    max: 599
+  - name: alert_on_fail
+    label: 失败时非零退出
+    type: bool
+    default: true
+
+computed:
+  url_list: "[u.strip() for u in urls.split(',') if u.strip()]"
+
+script: |
+  #!/bin/bash
+  TIMEOUT={{ timeout }}
+  EXPECT={{ expected_code }}
+  FAIL=0
+  {% for url in url_list %}
+  echo -n "检查 {{ url }} ... "
+  CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time $TIMEOUT "{{ url }}" || echo "000")
+  TIME=$(curl -s -o /dev/null -w "%{time_total}" --max-time $TIMEOUT "{{ url }}" 2>/dev/null || echo "N/A")
+  if [ "$CODE" = "$EXPECT" ]; then
+    echo "OK ($CODE, ${TIME}s)"
+  else
+    echo "FAIL (got $CODE, expect $EXPECT)"
+    FAIL=1
+  fi
+  {% endfor %}
+  {% if alert_on_fail %}
+  exit $FAIL
+  {% else %}
+  exit 0
+  {% endif %}

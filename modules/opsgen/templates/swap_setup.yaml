@@ -1,0 +1,43 @@
+name: swap_setup
+title: Swap 交换分区
+description: 创建并启用 Swap 文件，优化内存不足场景
+icon: 💱
+category: deploy
+
+questions:
+  - name: swap_size_gb
+    label: Swap 大小 (GB)
+    type: int
+    default: 4
+    min: 1
+    max: 64
+    required: true
+  - name: swappiness
+    label: Swappiness
+    type: int
+    default: 10
+    min: 0
+    max: 100
+    help: 越低越倾向使用物理内存
+  - name: swap_file
+    label: Swap 文件路径
+    type: string
+    default: /swapfile
+
+script: |
+  #!/bin/bash
+  set -euo pipefail
+  SWAP="{{ swap_file }}"
+  SIZE={{ swap_size_gb }}G
+  if swapon --show | grep -q "$SWAP"; then
+    echo "Swap 已存在: $SWAP"
+    exit 0
+  fi
+  fallocate -l "$SIZE" "$SWAP" || dd if=/dev/zero of="$SWAP" bs=1M count=$(({{ swap_size_gb }} * 1024))
+  chmod 600 "$SWAP"
+  mkswap "$SWAP"
+  swapon "$SWAP"
+  grep -q "$SWAP" /etc/fstab || echo "$SWAP none swap sw 0 0" >> /etc/fstab
+  sysctl vm.swappiness={{ swappiness }}
+  grep -q swappiness /etc/sysctl.conf || echo "vm.swappiness={{ swappiness }}" >> /etc/sysctl.conf
+  echo "==> Swap 已启用: $(swapon --show)"

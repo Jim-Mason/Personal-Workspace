@@ -1,0 +1,62 @@
+name: prometheus_exporter
+title: Prometheus Node Exporter
+description: 安装 Node Exporter 并配置 systemd 服务
+icon: 📊
+category: deploy
+
+questions:
+  - name: version
+    label: 版本
+    type: string
+    default: "1.7.0"
+  - name: port
+    label: 监听端口
+    type: int
+    default: 9100
+    min: 1
+    max: 65535
+  - name: install_dir
+    label: 安装目录
+    type: string
+    default: /opt/node_exporter
+  - name: enable_textfile
+    label: 启用 Textfile Collector
+    type: bool
+    default: false
+  - name: textfile_dir
+    label: Textfile 目录
+    type: string
+    default: /var/lib/node_exporter/textfile
+    show_when:
+      enable_textfile: true
+
+script: |
+  #!/bin/bash
+  set -euo pipefail
+  VER="{{ version }}"
+  DIR="{{ install_dir }}"
+  URL="https://github.com/prometheus/node_exporter/releases/download/v${VER}/node_exporter-${VER}.linux-amd64.tar.gz"
+  useradd --no-create-home --shell /bin/false node_exporter 2>/dev/null || true
+  mkdir -p "$DIR"
+  curl -sL "$URL" | tar xz -C /tmp
+  cp /tmp/node_exporter-${VER}.linux-amd64/node_exporter "$DIR/"
+  ARGS="--web.listen-address=:{{ port }}"
+  {% if enable_textfile %}
+  mkdir -p {{ textfile_dir }}
+  chown node_exporter:node_exporter {{ textfile_dir }}
+  ARGS="$ARGS --collector.textfile.directory={{ textfile_dir }}"
+  {% endif %}
+  cat > /etc/systemd/system/node_exporter.service <<EOF
+  [Unit]
+  Description=Node Exporter
+  After=network.target
+  [Service]
+  User=node_exporter
+  ExecStart=${DIR}/node_exporter \$ARGS
+  Restart=always
+  [Install]
+  WantedBy=multi-user.target
+  EOF
+  systemctl daemon-reload && systemctl enable --now node_exporter
+  curl -s localhost:{{ port }}/metrics | head -5
+  echo "==> Node Exporter 运行在 :{{ port }}"

@@ -1,0 +1,55 @@
+name: ssl_cert_check
+title: SSL 证书过期检查
+description: 批量检测域名 SSL 证书有效期，过期前告警
+icon: 🔒
+category: diagnose
+
+questions:
+  - name: domains
+    label: 域名列表
+    type: string
+    default: "example.com,www.example.com"
+    required: true
+    help: 逗号分隔
+  - name: warn_days
+    label: 告警阈值 (天)
+    type: int
+    default: 30
+    min: 1
+    max: 365
+  - name: port
+    label: SSL 端口
+    type: int
+    default: 443
+    min: 1
+    max: 65535
+
+computed:
+  domain_list: "[d.strip() for d in domains.split(',') if d.strip()]"
+
+script: |
+  #!/bin/bash
+  set -euo pipefail
+  WARN_DAYS={{ warn_days }}
+  PORT={{ port }}
+  EXIT=0
+  {% for domain in domain_list %}
+  echo "检查 {{ domain }}:${PORT}..."
+  EXPIRY=$(echo | openssl s_client -servername {{ domain }} -connect {{ domain }}:${PORT} 2>/dev/null \
+    | openssl x509 -noout -enddate 2>/dev/null | cut -d= -f2)
+  if [ -z "$EXPIRY" ]; then
+    echo "  [ERROR] {{ domain }} 无法获取证书"
+    EXIT=1
+    continue
+  fi
+  EXPIRY_EPOCH=$(date -d "$EXPIRY" +%s 2>/dev/null || date -j -f "%b %d %T %Y %Z" "$EXPIRY" +%s)
+  NOW=$(date +%s)
+  DAYS=$(( (EXPIRY_EPOCH - NOW) / 86400 ))
+  if [ "$DAYS" -lt "$WARN_DAYS" ]; then
+    echo "  [WARN] {{ domain }} 剩余 ${DAYS} 天 ($EXPIRY)"
+    EXIT=1
+  else
+    echo "  [OK] {{ domain }} 剩余 ${DAYS} 天"
+  fi
+  {% endfor %}
+  exit $EXIT

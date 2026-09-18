@@ -1,0 +1,24 @@
+Personal Workspace
+Copyright 2026 Jim-Mason
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+----------------------------------------------------------------------
+
+本产品包含第三方软件，其许可与版权声明如下：
+
+1. OpsGen
+   https://github.com/MMCISAGOODMAN/OpsGen
+   版权归原作者 MMCISAGOODMAN 所有，依 MIT 许可使用。
+   源码位于 modules/opsgen/，原样保留、未作修改。
+   上游仓库当时未附 LICENSE 文件，许可信息取自其 README 的声明。

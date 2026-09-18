@@ -1,0 +1,64 @@
+name: golang_binary_deploy
+title: Go 二进制部署
+description: 部署 Go 编译二进制并配置 systemd 服务
+icon: 🔵
+category: deploy
+
+questions:
+  - name: app_name
+    label: 应用名称
+    type: string
+    default: myservice
+    required: true
+  - name: binary_path
+    label: 二进制路径
+    type: string
+    default: /opt/myservice/bin/app
+    required: true
+  - name: config_file
+    label: 配置文件
+    type: string
+    default: /opt/myservice/config.yml
+  - name: run_user
+    label: 运行用户
+    type: string
+    default: app
+  - name: bind_port
+    label: 监听端口
+    type: int
+    default: 8080
+    min: 1
+    max: 65535
+  - name: env_vars
+    label: 环境变量
+    type: string
+    default: "GIN_MODE=release"
+
+computed:
+  env_list: "[item.strip() for item in env_vars.split(',') if item.strip()]"
+
+script: |
+  #!/bin/bash
+  set -euo pipefail
+  id {{ run_user }} &>/dev/null || useradd -r -s /sbin/nologin {{ run_user }}
+  chmod +x {{ binary_path }}
+  chown -R {{ run_user }}:{{ run_user }} $(dirname {{ binary_path }})
+  cat > /etc/systemd/system/{{ app_name }}.service <<EOF
+  [Unit]
+  Description={{ app_name }}
+  After=network.target
+  [Service]
+  Type=simple
+  User={{ run_user }}
+  {% for env in env_list %}
+  {% set parts = env.split('=', 1) %}
+  Environment={{ parts[0] }}={{ parts[1] if parts|length > 1 else '' }}
+  {% endfor %}
+  ExecStart={{ binary_path }} --config {{ config_file }}
+  Restart=on-failure
+  [Install]
+  WantedBy=multi-user.target
+  EOF
+  systemctl daemon-reload && systemctl enable --now {{ app_name }}
+  systemctl status {{ app_name }} --no-pager
+  echo "==> {{ app_name }} 已部署"

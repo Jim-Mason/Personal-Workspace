@@ -1,0 +1,111 @@
+name: log_cleanup
+title: 日志清理脚本
+description: 基于 find 与 logrotate 风格的日志清理脚本，支持压缩与磁盘阈值告警
+icon: 🧹
+category: maintenance
+
+questions:
+  - name: log_dir
+    label: 日志目录
+    type: string
+    default: /var/log/myapp
+    required: true
+    help: 需要清理的日志文件所在目录
+
+  - name: retention_days
+    label: 保留天数
+    type: int
+    default: 7
+    min: 1
+    max: 365
+    required: true
+    help: 超过此天数的日志将被删除
+
+  - name: disk_threshold
+    label: 磁盘使用率阈值 (%)
+    type: int
+    default: 85
+    min: 50
+    max: 99
+    required: true
+    help: 磁盘使用率超过此值时触发紧急清理
+
+  - name: compress_old
+    label: 压缩旧日志
+    type: bool
+    default: true
+    help: 删除前是否 gzip 压缩超过 1 天的日志
+
+  - name: dry_run
+    label: 试运行模式
+    type: bool
+    default: false
+    help: 仅打印操作，不实际删除文件
+
+computed:
+  log_dir_name: "log_dir.rstrip('/').split('/')[-1]"
+
+script: |
+  #!/bin/bash
+  # 日志清理脚本 - {{ log_dir }}
+  # 保留 {{ retention_days }} 天，磁盘阈值 {{ disk_threshold }}%
+  set -euo pipefail
+
+  LOG_DIR="{{ log_dir }}"
+  RETENTION={{ retention_days }}
+  DISK_THRESHOLD={{ disk_threshold }}
+  DRY_RUN={% if dry_run %}true{% else %}false{% endif %}
+  COMPRESS={% if compress_old %}true{% else %}false{% endif %}
+
+  LOG_FILE="/var/log/{{ log_dir_name }}_cleanup.log"
+
+  log() {
+      echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG_FILE"
+  }
+
+  run_cmd() {
+      if [ "$DRY_RUN" = "true" ]; then
+          log "[DRY-RUN] $*"
+      else
+          log "执行: $*"
+          eval "$@"
+      fi
+  }
+
+  check_disk() {
+      local usage
+      usage=$(df "$LOG_DIR" 2>/dev/null | awk 'NR==2 {gsub(/%/,""); print $5}')
+      if [ -z "$usage" ]; then
+          usage=$(df / | awk 'NR==2 {gsub(/%/,""); print $5}')
+      fi
+      echo "$usage"
+  }
+
+  log "===== 日志清理开始 ====="
+  log "目录: $LOG_DIR | 保留: ${RETENTION}天 | 阈值: ${DISK_THRESHOLD}%"
+
+  if [ ! -d "$LOG_DIR" ]; then
+      log "错误: 目录 $LOG_DIR 不存在"
+      exit 1
+  fi
+
+  DISK_USAGE=$(check_disk)
+  log "当前磁盘使用率: ${DISK_USAGE}%"
+
+  {% if compress_old %}
+  log "--> 压缩超过 1 天的未压缩日志..."
+  run_cmd "find '$LOG_DIR' -type f -name '*.log' -mtime +1 ! -name '*.gz' -exec gzip {} \\;"
+  {% endif %}
+
+  log "--> 删除超过 ${RETENTION} 天的日志..."
+  run_cmd "find '$LOG_DIR' -type f \\( -name '*.log' -o -name '*.log.*' -o -name '*.gz' \\) -mtime +${RETENTION} -delete"
+
+  DISK_USAGE=$(check_disk)
+  if [ "$DISK_USAGE" -ge "$DISK_THRESHOLD" ]; then
+      log "警告: 磁盘使用率 ${DISK_USAGE}% 超过阈值 ${DISK_THRESHOLD}%"
+      log "--> 执行紧急清理（保留 3 天）..."
+      run_cmd "find '$LOG_DIR' -type f \\( -name '*.log' -o -name '*.log.*' -o -name '*.gz' \\) -mtime +3 -delete"
+  fi
+
+  log "===== 清理完成 ====="
+  log "剩余文件数: $(find '$LOG_DIR' -type f | wc -l)"

@@ -1,0 +1,72 @@
+name: postgresql_backup
+title: PostgreSQL 备份
+description: pg_dump 全库/单库备份，支持 gzip 压缩与定时任务
+icon: 🐘
+category: backup
+
+questions:
+  - name: db_user
+    label: 数据库用户
+    type: string
+    default: postgres
+    required: true
+  - name: db_name
+    label: 数据库名
+    type: string
+    default: mydb
+    help: 输入 all 备份所有库
+  - name: backup_dir
+    label: 备份目录
+    type: string
+    default: /backup/postgresql
+    required: true
+  - name: retention_days
+    label: 保留天数
+    type: int
+    default: 7
+    min: 1
+    max: 90
+  - name: compress
+    label: gzip 压缩
+    type: bool
+    default: true
+  - name: add_crontab
+    label: 添加 Crontab
+    type: bool
+    default: true
+  - name: cron_hour
+    label: 执行小时
+    type: int
+    default: 3
+    min: 0
+    max: 23
+    show_when:
+      add_crontab: true
+
+script: |
+  #!/bin/bash
+  set -euo pipefail
+  BACKUP_DIR="{{ backup_dir }}"
+  RETENTION={{ retention_days }}
+  TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+  mkdir -p "$BACKUP_DIR"
+  {% if db_name == 'all' %}
+  FILE="${BACKUP_DIR}/pg_all_${TIMESTAMP}"
+  {% if compress %}
+  pg_dumpall -U {{ db_user }} | gzip > "${FILE}.sql.gz"
+  {% else %}
+  pg_dumpall -U {{ db_user }} > "${FILE}.sql"
+  {% endif %}
+  {% else %}
+  FILE="${BACKUP_DIR}/pg_{{ db_name }}_${TIMESTAMP}"
+  {% if compress %}
+  pg_dump -U {{ db_user }} {{ db_name }} | gzip > "${FILE}.sql.gz"
+  {% else %}
+  pg_dump -U {{ db_user }} {{ db_name }} > "${FILE}.sql"
+  {% endif %}
+  {% endif %}
+  find "$BACKUP_DIR" -name "pg_*" -mtime +${RETENTION} -delete
+  echo "==> 备份完成: $(ls -lh ${FILE}* | tail -1)"
+  {% if add_crontab %}
+  (crontab -l 2>/dev/null | grep -v pg_backup; echo "{{ cron_hour }} 0 * * * $(realpath "$0")") | crontab -
+  {% endif %}

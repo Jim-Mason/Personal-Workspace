@@ -1,0 +1,52 @@
+# ============================================================
+# 开发工具箱 —— systemd 服务单元
+#
+# 安装：
+#   sudo cp deploy/dev-toolbox.service /etc/systemd/system/
+#   sudo vi /etc/systemd/system/dev-toolbox.service   # 按需改 User / WorkingDirectory
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now dev-toolbox
+#   sudo journalctl -u dev-toolbox -f
+# ============================================================
+
+[Unit]
+Description=开发工具箱 —— 内网工具导航门户 + 反向代理网关
+Documentation=file:///opt/dev-toolbox/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=exec
+User=dev-toolbox
+Group=dev-toolbox
+WorkingDirectory=/opt/dev-toolbox
+
+# 环境变量全部由项目根目录的 .env 提供（应用自身会读取），
+# 如需用 systemd 覆盖个别变量，取消下一行注释。
+# EnvironmentFile=-/opt/dev-toolbox/.env
+
+ExecStart=/opt/dev-toolbox/deploy/start.sh
+
+Restart=always
+RestartSec=3
+# 反复启动失败时不要无限重启刷日志
+StartLimitIntervalSec=120
+StartLimitBurst=5
+
+# ---- 安全加固 ----
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+# 只有数据目录需要写权限（SQLite 主库 + WAL）
+ReadWritePaths=/opt/dev-toolbox/data
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=dev-toolbox
+
+[Install]
+WantedBy=multi-user.target

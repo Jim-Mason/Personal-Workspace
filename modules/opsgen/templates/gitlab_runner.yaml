@@ -1,0 +1,61 @@
+name: gitlab_runner
+title: GitLab Runner 安装
+description: 安装 GitLab Runner 并注册 Executor
+icon: 🦊
+category: deploy
+
+questions:
+  - name: gitlab_url
+    label: GitLab URL
+    type: string
+    default: "https://gitlab.com"
+    required: true
+  - name: registration_token
+    label: 注册 Token
+    type: string
+    default: ""
+    required: true
+  - name: runner_name
+    label: Runner 名称
+    type: string
+    default: ops-runner-01
+  - name: executor
+    label: Executor 类型
+    type: choice
+    choices: [shell, docker, docker-windows]
+    default: shell
+  - name: docker_image
+    label: 默认 Docker 镜像
+    type: string
+    default: alpine:latest
+    show_when:
+      executor: docker
+  - name: tags
+    label: Runner Tags
+    type: string
+    default: "linux,shell"
+
+script: |
+  #!/bin/bash
+  set -euo pipefail
+  curl -sL "https://packages.gitlab.com/install/repositories/runner/gitlab-runner/script.deb.sh" | bash
+  apt-get install -y gitlab-runner
+  {% if executor == 'docker' %}
+  gitlab-runner register --non-interactive \
+    --url {{ gitlab_url }} \
+    --registration-token {{ registration_token }} \
+    --name {{ runner_name }} \
+    --executor docker \
+    --docker-image {{ docker_image }} \
+    --tag-list {{ tags }}
+  {% else %}
+  gitlab-runner register --non-interactive \
+    --url {{ gitlab_url }} \
+    --registration-token {{ registration_token }} \
+    --name {{ runner_name }} \
+    --executor {{ executor }} \
+    --tag-list {{ tags }}
+  {% endif %}
+  systemctl enable gitlab-runner && systemctl start gitlab-runner
+  gitlab-runner verify
+  echo "==> GitLab Runner 已注册"

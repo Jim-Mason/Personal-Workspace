@@ -1,0 +1,53 @@
+name: certbot_standalone
+title: Certbot 独立模式 SSL
+description: 使用 Certbot standalone 模式申请 Let's Encrypt 证书
+icon: 📜
+category: deploy
+
+questions:
+  - name: domains
+    label: 域名列表
+    type: string
+    default: "example.com,www.example.com"
+    required: true
+    help: 逗号分隔
+  - name: email
+    label: 邮箱
+    type: string
+    default: admin@example.com
+    required: true
+  - name: webroot
+    label: Webroot 路径
+    type: string
+    default: /var/www/html
+    help: 使用 webroot 模式时填写，留空用 standalone
+  - name: use_webroot
+    label: 使用 Webroot 模式
+    type: bool
+    default: false
+  - name: renew_hook
+    label: 续期后命令
+    type: string
+    default: "systemctl reload nginx"
+
+computed:
+  domain_list: "[d.strip() for d in domains.split(',') if d.strip()]"
+  domain_flags: "' '.join(['-d ' + d for d in domain_list])"
+
+script: |
+  #!/bin/bash
+  set -euo pipefail
+  apt-get update -y && apt-get install -y certbot
+  {% if use_webroot %}
+  certbot certonly --webroot -w {{ webroot }} \
+    --email {{ email }} --agree-tos --non-interactive \
+    {{ domain_flags }}
+  {% else %}
+  systemctl stop nginx 2>/dev/null || true
+  certbot certonly --standalone \
+    --email {{ email }} --agree-tos --non-interactive \
+    {{ domain_flags }}
+  systemctl start nginx 2>/dev/null || true
+  {% endif %}
+  (crontab -l 2>/dev/null; echo "0 3 * * * certbot renew --quiet --deploy-hook '{{ renew_hook }}'") | crontab -
+  echo "==> 证书已申请: /etc/letsencrypt/live/{{ domain_list[0] }}/"

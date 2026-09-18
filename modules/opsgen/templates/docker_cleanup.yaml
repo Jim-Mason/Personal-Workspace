@@ -1,0 +1,65 @@
+name: docker_cleanup
+title: Docker 资源清理
+description: 清理停止的容器、悬空镜像、未使用的网络与卷
+icon: 🧽
+category: maintenance
+
+questions:
+  - name: remove_containers
+    label: 删除停止的容器
+    type: bool
+    default: true
+  - name: remove_images
+    label: 删除悬空镜像
+    type: bool
+    default: true
+  - name: remove_volumes
+    label: 删除未使用卷
+    type: bool
+    default: false
+  - name: remove_networks
+    label: 删除未使用网络
+    type: bool
+    default: true
+  - name: prune_build_cache
+    label: 清理构建缓存
+    type: bool
+    default: false
+  - name: dry_run
+    label: 仅预览
+    type: bool
+    default: true
+
+script: |
+  #!/bin/bash
+  set -euo pipefail
+  echo "==> Docker 磁盘使用:"
+  docker system df 2>/dev/null || { echo "Docker 未安装"; exit 1; }
+  {% if dry_run %}
+  echo "==> 预览模式 (添加 --force 执行):"
+  {% if remove_containers %}
+  docker container ls -a --filter status=exited --format '{{ '{{' }}.ID{{ '}}' }} {{ '{{' }}.Names{{ '}}' }}'
+  {% endif %}
+  {% if remove_images %}
+  docker images -f dangling=true
+  {% endif %}
+  echo "执行: bash $0 并设置 dry_run=false"
+  {% else %}
+  {% if remove_containers %}
+  docker container prune -f
+  {% endif %}
+  {% if remove_images %}
+  docker image prune -af
+  {% endif %}
+  {% if remove_volumes %}
+  docker volume prune -f
+  {% endif %}
+  {% if remove_networks %}
+  docker network prune -f
+  {% endif %}
+  {% if prune_build_cache %}
+  docker builder prune -af
+  {% endif %}
+  echo "==> 清理完成"
+  docker system df
+  {% endif %}

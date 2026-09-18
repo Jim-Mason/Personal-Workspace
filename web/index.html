@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-mode="{{mode}}" data-bg="{{bg_style}}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{app_name}}</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="stylesheet" href="/style.css">
+<!--BRANDING_CSS-->
+</head>
+<body>
+
+<!-- 背景三层：光晕（可动） / 自定义图片 / 网格纹理。
+     全部 aria-hidden + pointer-events:none，纯装饰，不参与交互与无障碍树。 -->
+<div class="scene" aria-hidden="true">
+  <div class="bg-photo"></div>
+  <div class="bg-veil"></div>
+  <div class="bg-grid"></div>
+  <div class="blob blob-a"></div>
+  <div class="blob blob-b"></div>
+  <div class="blob blob-c"></div>
+</div>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="logo" id="brand-logo">
+      <span id="brand-logo-text">{{logo_text}}</span>
+    </span>
+    <div class="brand-text">
+      <h1 id="brand-name">{{app_name}}</h1>
+      <p id="brand-tagline">{{tagline}}</p>
+    </div>
+  </div>
+
+  <nav class="tabs" id="tabs">
+    <span class="tab-glider" id="tab-glider"></span>
+    <button type="button" class="tab is-active" data-tab="overview">概览</button>
+    <button type="button" class="tab" data-tab="apps">本机资产</button>
+    <button type="button" class="tab" data-tab="modules">模块</button>
+    <button type="button" class="tab" data-tab="audit">审计流水</button>
+  </nav>
+
+  <div class="topbar-right">
+    <span class="pill" id="local-pill">仅本机可访问</span>
+    <div class="seg" id="view-switch" title="切换视图">
+      <button type="button" data-view="grid" class="is-active">卡片</button>
+      <button type="button" data-view="table">表格</button>
+    </div>
+    <button type="button" class="btn btn-ghost" id="btn-appearance">外观</button>
+    <button type="button" class="btn btn-primary" id="btn-scan">扫描本机</button>
+  </div>
+</header>
+
+<main>
+
+  <section class="panel is-active" id="panel-overview">
+
+    <div class="hero" id="hero">
+      <div class="hero-main">
+        <span class="hero-badge" id="hero-badge">v{{version}}</span>
+        <h2 class="hero-title">这台机器的全貌，一眼看完</h2>
+        <p class="hero-sub" id="hero-sub">读取已安装程序清单 · 全程只读 · 不联网 · 不改动任何文件</p>
+      </div>
+      <div class="hero-actions">
+        <button type="button" class="btn btn-primary btn-lg" id="btn-scan-hero">开始扫描</button>
+        <button type="button" class="btn btn-lg" data-goto="apps">查看清单</button>
+      </div>
+    </div>
+
+    <div id="overview-body" hidden>
+      <div class="metrics" id="metrics"></div>
+
+      <div class="grid-2">
+        <section class="card">
+          <h2>占用最大的应用</h2>
+          <p class="card-note">占用来自安装程序自己登记的大小，未必等于磁盘实际占用</p>
+          <ul class="mini-list" id="list-largest"></ul>
+        </section>
+        <section class="card">
+          <h2>最近安装</h2>
+          <p class="card-note">按安装程序登记的安装日期排序</p>
+          <ul class="mini-list" id="list-recent"></ul>
+        </section>
+      </div>
+
+      <section class="card">
+        <h2>最近动作</h2>
+        <p class="card-note">扫描、启动、忽略都会留痕</p>
+        <ul class="timeline" id="list-events"></ul>
+      </section>
+    </div>
+  </section>
+
+  <section class="panel" id="panel-apps">
+    <div class="toolbar">
+      <input type="search" id="search" class="input" placeholder="搜索名称、发布者、路径…" autocomplete="off">
+      <select id="filter-source" class="input select">
+        <option value="">全部来源</option>
+        <option value="registry">注册表（已安装程序）</option>
+        <option value="startmenu">开始菜单（补充）</option>
+      </select>
+      <select id="sort-by" class="input select">
+        <option value="name">按名称</option>
+        <option value="size">按占用大小</option>
+        <option value="installed">按安装日期</option>
+        <option value="recent">按最近使用</option>
+        <option value="used">按启动次数</option>
+      </select>
+      <label class="checkbox"><input type="checkbox" id="show-ignored"> 显示已忽略</label>
+      <span class="toolbar-count" id="apps-count"></span>
+    </div>
+
+    <div class="app-grid" id="apps-grid"></div>
+
+    <div class="table-wrap" id="apps-table-wrap" hidden>
+      <table class="table" id="apps-table">
+        <thead>
+          <tr>
+            <th class="col-name">名称</th>
+            <th>版本</th>
+            <th>发布者</th>
+            <th class="col-num">占用</th>
+            <th>安装日期</th>
+            <th>来源</th>
+            <th class="col-act">操作</th>
+          </tr>
+        </thead>
+        <tbody id="apps-tbody"></tbody>
+      </table>
+    </div>
+
+    <p class="table-empty" id="apps-empty" hidden>没有匹配的记录</p>
+  </section>
+
+  <section class="panel" id="panel-modules">
+    <div class="toolbar">
+      <span class="toolbar-label">中台模块</span>
+      <span class="toolbar-count" id="modules-count"></span>
+      <span class="spacer"></span>
+      <button type="button" class="btn btn-sm btn-ghost" id="btn-modules-reload">重载声明</button>
+    </div>
+    <p class="card-note" id="modules-hint">
+      模块由 <code>modules/&lt;id&gt;/module.py</code> 声明接入方式。子进程类模块的内部端口只绑
+      127.0.0.1，浏览器永远只访问中台这一个地址，模块的端口对外不存在。
+    </p>
+    <div class="module-errors" id="module-errors" hidden></div>
+    <div class="module-list" id="module-list"></div>
+    <p class="table-empty" id="modules-empty" hidden>
+      还没有接入任何模块。把模块放进 <code>modules/&lt;id&gt;/</code> 并写好 <code>module.py</code>，
+      然后点右上角「重载声明」。
+    </p>
+  </section>
+
+  <section class="panel" id="panel-audit">
+    <section class="card">
+      <h2>审计流水</h2>
+      <p class="card-note">所有扫描、启动、忽略、外观变更动作都会留下记录，可追溯到秒</p>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th class="col-time">时间</th>
+              <th>动作</th>
+              <th>对象</th>
+              <th>详情</th>
+            </tr>
+          </thead>
+          <tbody id="events-tbody"></tbody>
+        </table>
+        <p class="table-empty" id="events-empty" hidden>暂无记录</p>
+      </div>
+    </section>
+  </section>
+
+</main>
+
+<!-- ------------------------------------------------------------ 外观设置抽屉 -->
+<div class="drawer-mask" id="drawer-mask" hidden></div>
+<aside class="drawer" id="drawer" hidden aria-label="外观设置">
+  <div class="drawer-head">
+    <div>
+      <h2>外观设置</h2>
+      <p class="card-note" id="drawer-hint">改动即时预览，点「保存」才写进配置</p>
+    </div>
+    <button type="button" class="btn btn-ghost btn-sm" id="drawer-close">关闭</button>
+  </div>
+
+  <div class="drawer-body">
+
+    <section class="field-group">
+      <h3>品牌</h3>
+      <label class="field"><span>平台名称</span><input type="text" class="input" id="f-app-name" maxlength="32"></label>
+      <label class="field"><span>副标题</span><input type="text" class="input" id="f-tagline" maxlength="48"></label>
+      <label class="field"><span>Logo 文字</span><input type="text" class="input" id="f-logo-text" maxlength="4"></label>
+    </section>
+
+    <section class="field-group">
+      <h3>主题预设</h3>
+      <div class="preset-row" id="preset-row"></div>
+    </section>
+
+    <section class="field-group">
+      <h3>配色</h3>
+      <div class="field-row">
+        <label class="field"><span>明暗</span>
+          <div class="seg" id="mode-switch">
+            <button type="button" data-mode="light" class="is-active">浅色</button>
+            <button type="button" data-mode="dark">深色</button>
+          </div>
+        </label>
+        <label class="field"><span>背景样式</span>
+          <div class="seg" id="bgstyle-switch">
+            <button type="button" data-bg="aura">光晕</button>
+            <button type="button" data-bg="grid">网格</button>
+            <button type="button" data-bg="plain">纯色</button>
+          </div>
+        </label>
+      </div>
+      <div class="swatch-row">
+        <label class="swatch"><input type="color" id="f-accent"><span>主色</span></label>
+        <label class="swatch"><input type="color" id="f-accent2"><span>副色</span></label>
+        <label class="swatch"><input type="color" id="f-bg"><span>底色</span></label>
+        <label class="swatch"><input type="color" id="f-surface"><span>面板</span></label>
+        <label class="swatch"><input type="color" id="f-text"><span>文字</span></label>
+      </div>
+    </section>
+
+    <section class="field-group">
+      <h3>图片</h3>
+      <div class="upload-row">
+        <div class="upload-thumb" id="logo-thumb"><span>无</span></div>
+        <div class="upload-actions">
+          <p class="upload-label">Logo 图片（覆盖 Logo 文字）</p>
+          <div class="row-actions">
+            <label class="btn btn-sm" for="f-logo-file">选择图片</label>
+            <input type="file" id="f-logo-file" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
+            <button type="button" class="btn btn-sm btn-ghost" id="btn-logo-clear">清除</button>
+          </div>
+        </div>
+      </div>
+      <div class="upload-row">
+        <div class="upload-thumb upload-thumb-wide" id="bg-thumb"><span>无</span></div>
+        <div class="upload-actions">
+          <p class="upload-label">页面背景图</p>
+          <div class="row-actions">
+            <label class="btn btn-sm" for="f-bg-file">选择图片</label>
+            <input type="file" id="f-bg-file" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
+            <button type="button" class="btn btn-sm btn-ghost" id="btn-bg-clear">清除</button>
+          </div>
+        </div>
+      </div>
+      <label class="field"><span>背景蒙层 <b id="overlay-value">52</b>%</span>
+        <input type="range" id="f-overlay" min="0" max="90" step="1">
+      </label>
+      <p class="card-note" id="upload-hint"></p>
+    </section>
+
+    <section class="field-group drawer-foot">
+      <button type="button" class="btn btn-ghost" id="btn-brand-reset">恢复默认</button>
+      <span class="spacer"></span>
+      <button type="button" class="btn btn-primary" id="btn-brand-save">保存</button>
+    </section>
+
+  </div>
+</aside>
+
+<!-- ------------------------------------------------- 模块运行区（iframe） -->
+<div class="runner" id="runner" hidden>
+  <div class="runner-bar">
+    <button type="button" class="btn btn-sm btn-ghost" id="runner-back">← 返回中台</button>
+    <span class="state-dot" id="runner-dot"></span>
+    <span class="runner-title" id="runner-title">模块</span>
+    <span class="runner-sub" id="runner-sub"></span>
+    <span class="spacer"></span>
+    <button type="button" class="btn btn-sm btn-ghost" id="runner-reload">刷新</button>
+    <button type="button" class="btn btn-sm btn-ghost" id="runner-log">日志</button>
+    <button type="button" class="btn btn-sm btn-ghost" id="runner-external">新窗口打开</button>
+  </div>
+  <iframe id="runner-frame" class="runner-frame" title="模块内容" referrerpolicy="no-referrer"></iframe>
+</div>
+
+<!-- ------------------------------------------------------- 模块日志弹窗 -->
+<div class="modal-mask" id="modal-mask" hidden></div>
+<div class="modal" id="module-log-modal" hidden role="dialog" aria-label="模块日志">
+  <div class="modal-head">
+    <div>
+      <h2 id="log-title">模块日志</h2>
+      <p class="card-note" id="log-note"></p>
+    </div>
+    <button type="button" class="btn btn-sm btn-ghost" id="log-close">关闭</button>
+  </div>
+  <pre class="log-view" id="log-view"></pre>
+  <div class="modal-foot">
+    <button type="button" class="btn btn-sm btn-ghost" id="log-refresh">刷新</button>
+    <span class="spacer"></span>
+    <span class="mono muted" id="log-path"></span>
+  </div>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+<script src="/app.js"></script>
+</body>
+</html>

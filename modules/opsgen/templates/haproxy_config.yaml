@@ -1,0 +1,75 @@
+name: haproxy_config
+title: HAProxy 负载均衡
+description: 配置 HAProxy 反向代理与负载均衡
+icon: ⚖️
+category: deploy
+
+questions:
+  - name: frontend_port
+    label: 前端端口
+    type: int
+    default: 80
+    min: 1
+    max: 65535
+  - name: backend_servers
+    label: 后端服务器
+    type: string
+    default: "127.0.0.1:8080,127.0.0.1:8081"
+    help: 逗号分隔 IP:PORT
+  - name: balance_mode
+    label: 均衡算法
+    type: choice
+    choices: [roundrobin, leastconn, source]
+    default: roundrobin
+  - name: enable_stats
+    label: 启用统计页面
+    type: bool
+    default: true
+  - name: stats_port
+    label: 统计页面端口
+    type: int
+    default: 8404
+    show_when:
+      enable_stats: true
+  - name: enable_ssl
+    label: 启用 SSL 终止
+    type: bool
+    default: false
+
+computed:
+  server_list: "[s.strip() for s in backend_servers.split(',') if s.strip()]"
+
+script: |
+  #!/bin/bash
+  set -euo pipefail
+  apt-get update -y && apt-get install -y haproxy
+  cat > /etc/haproxy/haproxy.cfg <<'HAPROXY_EOF'
+  global
+      maxconn 4096
+
+  defaults
+      mode http
+      timeout connect 5000ms
+      timeout client 50000ms
+      timeout server 50000ms
+
+  frontend web
+      bind *:{{ frontend_port }}
+      default_backend servers
+
+  backend servers
+      balance {{ balance_mode }}
+  {% for server in server_list %}
+  {% set parts = server.split(':') %}
+      server srv{{ loop.index }} {{ parts[0] }}:{{ parts[1] if parts|length > 1 else '80' }} check
+  {% endfor %}
+
+  {% if enable_stats %}
+  listen stats
+      bind *:{{ stats_port }}
+      stats enable
+      stats uri /stats
+  {% endif %}
+  HAPROXY_EOF
+  systemctl enable haproxy && systemctl restart haproxy
+  echo "==> HAProxy 已启动，端口 {{ frontend_port }}"

@@ -1,0 +1,43 @@
+name: port_check
+title: 端口批量检测
+description: 检测主机上多个端口的开放状态
+icon: 🔌
+category: diagnose
+
+questions:
+  - name: host
+    label: 目标主机
+    type: string
+    default: 127.0.0.1
+    required: true
+  - name: ports
+    label: 端口列表
+    type: string
+    default: "22,80,443,3306,6379,8080"
+    required: true
+    help: 逗号分隔
+  - name: timeout
+    label: 超时 (秒)
+    type: int
+    default: 3
+    min: 1
+    max: 30
+
+computed:
+  port_list: "[int(p.strip()) for p in ports.split(',') if p.strip()]"
+
+script: |
+  #!/bin/bash
+  HOST="{{ host }}"
+  TIMEOUT={{ timeout }}
+  OPEN=0; CLOSED=0
+  {% for port in port_list %}
+  if nc -zv -w $TIMEOUT "$HOST" {{ port }} 2>&1 | grep -q succeeded; then
+    echo "[OPEN]  {{ port }}/tcp"
+    OPEN=$((OPEN+1))
+  else
+    echo "[CLOSED] {{ port }}/tcp"
+    CLOSED=$((CLOSED+1))
+  fi
+  {% endfor %}
+  echo "--- 开放: $OPEN | 关闭: $CLOSED ---"

@@ -1,0 +1,61 @@
+name: cron_generator
+title: Crontab 任务生成
+description: 通用 Crontab 定时任务配置生成器
+icon: ⏰
+category: maintenance
+
+questions:
+  - name: minute
+    label: 分钟
+    type: string
+    default: "0"
+    help: "0-59 或 */5"
+  - name: hour
+    label: 小时
+    type: string
+    default: "2"
+  - name: day
+    label: 日
+    type: string
+    default: "*"
+  - name: month
+    label: 月
+    type: string
+    default: "*"
+  - name: weekday
+    label: 星期
+    type: string
+    default: "*"
+    help: "0-7 (0和7=周日)"
+  - name: command
+    label: 执行命令
+    type: string
+    default: "/opt/scripts/backup.sh >> /var/log/backup.log 2>&1"
+    required: true
+  - name: job_comment
+    label: 任务注释
+    type: string
+    default: "Daily backup job"
+  - name: apply_crontab
+    label: 立即写入 Crontab
+    type: bool
+    default: false
+
+script: |
+  #!/bin/bash
+  CRON_LINE="{{ minute }} {{ hour }} {{ day }} {{ month }} {{ weekday }} {{ command }}"
+  echo "# {{ job_comment }}"
+  echo "$CRON_LINE"
+  {% if apply_crontab %}
+  (crontab -l 2>/dev/null | grep -v "{{ job_comment }}"; echo "# {{ job_comment }}"; echo "$CRON_LINE") | crontab -
+  echo "==> 已写入 crontab"
+  crontab -l
+  {% else %}
+  echo "==> 手动添加: crontab -e"
+  {% endif %}
+
+extra_outputs:
+  - name: crontab_entry.txt
+    content: |
+      # {{ job_comment }}
+      {{ minute }} {{ hour }} {{ day }} {{ month }} {{ weekday }} {{ command }}

@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block title %}生成结果 - {{ title }}{% endblock %}
+
+{% block content %}
+<section class="result-page">
+  <div class="result-header glass">
+    <a href="{{ url_for('template_form', name=template_name) }}" class="back-link">← 修改参数</a>
+    <h1>{% if is_preview %}👁{% else %}✅{% endif %} {{ title }}</h1>
+    <p>{% if is_preview %}默认参数预览，未保存历史记录{% else %}脚本已生成，可复制、下载或在线执行{% endif %}</p>
+
+    <div class="result-meta">
+      {% if params %}
+      <details class="params-details">
+        <summary>查看参数 ({{ params|length }})</summary>
+        <div class="params-list">
+          {% for k, v in params.items() %}
+          <span class="param-tag">{{ k }}={{ v }}</span>
+          {% endfor %}
+        </div>
+      </details>
+      {% endif %}
+    </div>
+
+    {% if share_id %}
+    <div class="share-box">
+      <label>分享链接</label>
+      <div class="share-input-row">
+        <input type="text" readonly class="form-input" id="share-url"
+               value="{{ request.url_root }}share/{{ share_id }}">
+        <button class="btn btn-ghost" onclick="OpsGen.copyText(document.getElementById('share-url').value)">复制</button>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="result-toolbar glass">
+    {% if share_id and outputs|length > 1 %}
+    <a href="{{ url_for('download_bundle', share_id=share_id) }}" class="btn btn-sm btn-primary">📦 打包下载 ZIP</a>
+    {% endif %}
+    {% if not is_preview %}
+    <a href="{{ url_for('template_quick', name=template_name) }}" class="btn btn-sm btn-ghost">⚡ 再次快速生成</a>
+    {% endif %}
+    <button class="btn btn-sm btn-ghost" onclick="OpsGen.copyText(JSON.stringify({{ params|tojson }}, null, 2))">📋 复制参数 JSON</button>
+  </div>
+
+  <div class="output-tabs glass">
+    {% for filename in outputs.keys() %}
+    <button class="tab-btn {% if loop.first %}active{% endif %}" data-tab="{{ filename }}">
+      {{ filename }}
+    </button>
+    {% endfor %}
+  </div>
+
+  {% for filename, content in outputs.items() %}
+  <div class="code-panel glass {% if loop.first %}active{% endif %}" data-panel="{{ filename }}">
+    <div class="code-toolbar">
+      <span class="code-filename">{{ filename }}</span>
+      <div class="code-actions">
+        <button class="btn btn-sm btn-ghost" onclick="OpsGen.copyCode('code-{{ filename | replace('.', '-') }}')">📋 复制</button>
+        {% if share_id %}
+        <a href="{{ url_for('download_script', share_id=share_id, filename=filename) }}" class="btn btn-sm btn-ghost">⬇️ 下载</a>
+        {% endif %}
+        {% if loop.first and not is_preview %}
+        <button class="btn btn-sm btn-accent" id="execute-btn" onclick="OpsGen.executeScript('code-{{ filename | replace('.', '-') }}')">▶️ 在线执行</button>
+        {% endif %}
+      </div>
+    </div>
+    <pre><code id="code-{{ filename | replace('.', '-') }}" class="language-bash">{{ content }}</code></pre>
+  </div>
+  {% endfor %}
+
+  {% if not is_preview %}
+  <div id="execution-panel" class="execution-panel glass hidden">
+    <div class="execution-header">
+      <span>终端输出</span>
+      <button class="btn btn-sm btn-ghost" onclick="OpsGen.closeExecution()">关闭</button>
+    </div>
+    <pre id="execution-output" class="terminal-output"></pre>
+  </div>
+  {% endif %}
+</section>
+{% endblock %}
+
+{% block scripts %}
+{% if not is_preview %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.4/socket.io.min.js"></script>
+<script src="{{ url_for('static', filename='js/websocket.js') }}"></script>
+{% endif %}
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    OpsGen.initTabs();
+    OpsGen.highlightAll();
+  });
+</script>
+{% endblock %}

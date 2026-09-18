@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+
+{% block title %}{{ template.title }}{% endblock %}
+
+{% block content %}
+<section class="form-page-wide">
+  <div class="form-header glass">
+    <a href="{{ url_for('index') }}" class="back-link">← 返回模板列表</a>
+    <div class="form-title-row">
+      <span class="form-icon">{{ template.icon }}</span>
+      <div>
+        <h1>{{ template.title }}</h1>
+        <p>{{ template.description }}</p>
+      </div>
+    </div>
+    <div class="form-header-actions">
+      <a href="{{ url_for('template_preview_page', name=template.name) }}" class="btn btn-sm btn-ghost">👁 默认预览</a>
+      <a href="{{ url_for('template_quick', name=template.name) }}" class="btn btn-sm btn-accent">⚡ 一键生成</a>
+    </div>
+  </div>
+
+  {% if error %}
+  <div class="alert alert-error glass">{{ error }}</div>
+  {% endif %}
+
+  <div class="form-layout">
+    <form id="template-form" class="form glass" method="POST"
+          action="{{ url_for('template_form', name=template.name) }}" novalidate
+          data-template="{{ template.name }}">
+      {% for question in template.questions %}
+      <div class="form-group" data-question="{{ question.name }}"
+           data-show-when='{{ question.show_when | tojson if question.show_when else "{}" }}'>
+        <label for="{{ question.name }}">
+          {{ question.label }}
+          {% if question.required %}<span class="required">*</span>{% endif %}
+        </label>
+
+        {% if question.type == 'string' %}
+        <input type="text" id="{{ question.name }}" name="{{ question.name }}"
+               value="{{ prefilled.get(question.name, question.default | default('')) }}"
+               {% if question.required %}required{% endif %}
+               {% if question.pattern %}pattern="{{ question.pattern }}"{% endif %}
+               class="form-input preview-field">
+
+        {% elif question.type == 'int' %}
+        <input type="number" id="{{ question.name }}" name="{{ question.name }}"
+               value="{{ prefilled.get(question.name, question.default | default('')) }}"
+               {% if question.min is defined %}min="{{ question.min }}"{% endif %}
+               {% if question.max is defined %}max="{{ question.max }}"{% endif %}
+               {% if question.required %}required{% endif %}
+               class="form-input preview-field">
+
+        {% elif question.type == 'bool' %}
+        <label class="toggle">
+          <input type="checkbox" id="{{ question.name }}" name="{{ question.name }}" class="preview-field"
+                 {% if prefilled.get(question.name, question.default | default(false)) in [true, 'true', '1', 'on', 'yes'] %}checked{% endif %}>
+          <span class="toggle-slider"></span>
+        </label>
+
+        {% elif question.type == 'choice' %}
+        <select id="{{ question.name }}" name="{{ question.name }}" class="form-input preview-field" {% if question.required %}required{% endif %}>
+          {% for choice in question.choices %}
+          <option value="{{ choice }}" {% if prefilled.get(question.name, question.default | default('')) == choice %}selected{% endif %}>{{ choice }}</option>
+          {% endfor %}
+        </select>
+
+        {% elif question.type == 'multi' %}
+        <div class="checkbox-group">
+          {% set selected = prefilled.get(question.name, question.default | default([])) %}
+          {% if selected is string %}
+            {% set selected = selected.split(',') %}
+          {% endif %}
+          {% for choice in question.choices %}
+          <label class="checkbox-item">
+            <input type="checkbox" name="{{ question.name }}" value="{{ choice }}" class="preview-field"
+                   {% if choice in selected %}checked{% endif %}>
+            <span>{{ choice }}</span>
+          </label>
+          {% endfor %}
+        </div>
+        {% endif %}
+
+        {% if question.help %}
+        <small class="form-help">{{ question.help }}</small>
+        {% endif %}
+        <span class="field-error" id="error-{{ question.name }}"></span>
+      </div>
+      {% endfor %}
+
+      <div class="preset-bar">
+        <button type="button" class="btn btn-sm btn-ghost" id="save-preset">💾 保存参数</button>
+        <button type="button" class="btn btn-sm btn-ghost" id="load-preset">📂 加载参数</button>
+      </div>
+
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary btn-lg">
+          <span>🚀</span> 生成脚本
+        </button>
+      </div>
+    </form>
+
+    <aside class="preview-panel glass">
+      <div class="preview-header">
+        <h3>实时预览</h3>
+        <span class="preview-status" id="preview-status">等待输入...</span>
+      </div>
+      <pre class="preview-code"><code id="live-preview-code" class="language-bash"># 填写参数后将实时显示生成的脚本</code></pre>
+    </aside>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/form.js') }}"></script>
+<script src="{{ url_for('static', filename='js/form_preview.js') }}"></script>
+{% endblock %}

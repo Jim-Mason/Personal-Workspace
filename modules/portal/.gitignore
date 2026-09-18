@@ -1,0 +1,37 @@
+# ---------- Python ----------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ---------- Node ----------
+node_modules/
+frontend/dist/
+*.tsbuildinfo
+npm-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# ---------- 运行时数据 ----------
+data/
+*.db
+*.db-wal
+*.db-shm
+logs/
+
+# ---------- 密钥与本地配置 ----------
+# .env.example 需要提交，真实 .env 绝不能提交
+.env
+.env.local
+.env.*.local
+
+# ---------- 编辑器 / 系统 ----------
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db

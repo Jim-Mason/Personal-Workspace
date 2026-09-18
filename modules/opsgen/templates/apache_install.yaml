@@ -1,0 +1,63 @@
+name: apache_install
+title: Apache 安装配置
+description: 安装 Apache2 并配置虚拟主机
+icon: 🪶
+category: deploy
+
+questions:
+  - name: domain
+    label: 域名
+    type: string
+    default: example.com
+    required: true
+  - name: document_root
+    label: 网站根目录
+    type: string
+    default: /var/www/example.com
+    required: true
+  - name: port
+    label: 端口
+    type: int
+    default: 80
+    min: 1
+    max: 65535
+  - name: enable_ssl
+    label: 启用 SSL 模块
+    type: bool
+    default: false
+  - name: enable_rewrite
+    label: 启用 mod_rewrite
+    type: bool
+    default: true
+
+computed:
+  domain_safe: "domain.replace('.', '_')"
+
+script: |
+  #!/bin/bash
+  set -euo pipefail
+  apt-get update -y && apt-get install -y apache2
+  {% if enable_ssl %}
+  a2enmod ssl
+  {% endif %}
+  {% if enable_rewrite %}
+  a2enmod rewrite
+  {% endif %}
+  a2enmod headers
+  mkdir -p {{ document_root }}
+  cat > /etc/apache2/sites-available/{{ domain_safe }}.conf <<'APACHE_EOF'
+  <VirtualHost *:{{ port }}>
+      ServerName {{ domain }}
+      DocumentRoot {{ document_root }}
+      <Directory {{ document_root }}>
+          AllowOverride All
+          Require all granted
+      </Directory>
+      ErrorLog ${APACHE_LOG_DIR}/{{ domain_safe }}_error.log
+      CustomLog ${APACHE_LOG_DIR}/{{ domain_safe }}_access.log combined
+  </VirtualHost>
+  APACHE_EOF
+  a2ensite {{ domain_safe }}.conf
+  a2dissite 000-default.conf 2>/dev/null || true
+  systemctl reload apache2
+  echo "==> Apache 已配置 {{ domain }}"

@@ -1,0 +1,63 @@
+name: rsync_backup
+title: Rsync 远程备份
+description: 通过 rsync 同步目录到本地或远程服务器
+icon: 🔄
+category: backup
+
+questions:
+  - name: source_dir
+    label: 源目录
+    type: string
+    default: /var/www/html
+    required: true
+  - name: dest
+    label: 目标路径
+    type: string
+    default: /backup/web
+    help: 本地路径或 user@host:/path
+    required: true
+  - name: delete_extra
+    label: 删除目标多余文件
+    type: bool
+    default: false
+  - name: compress
+    label: 传输压缩
+    type: bool
+    default: true
+  - name: exclude
+    label: 排除模式
+    type: string
+    default: "*.tmp,*.log,.git"
+    help: 逗号分隔
+  - name: add_crontab
+    label: 添加定时任务
+    type: bool
+    default: true
+  - name: cron_hour
+    label: 执行小时
+    type: int
+    default: 1
+    min: 0
+    max: 23
+    show_when:
+      add_crontab: true
+
+computed:
+  exclude_args: "' '.join(['--exclude=' + x.strip() for x in exclude.split(',') if x.strip()])"
+
+script: |
+  #!/bin/bash
+  set -euo pipefail
+  SRC="{{ source_dir }}"
+  DEST="{{ dest }}"
+  OPTS="-av{% if compress %}z{% endif %} --progress"
+  {% if delete_extra %}
+  OPTS="$OPTS --delete"
+  {% endif %}
+  EXCLUDES="{{ exclude_args }}"
+  echo "==> rsync $SRC -> $DEST"
+  rsync $OPTS $EXCLUDES "$SRC" "$DEST"
+  echo "==> 同步完成 $(date)"
+  {% if add_crontab %}
+  (crontab -l 2>/dev/null | grep -v rsync_backup; echo "{{ cron_hour }} 0 * * * $(realpath "$0") >> /var/log/rsync_backup.log 2>&1") | crontab -
+  {% endif %}

@@ -1,0 +1,57 @@
+name: process_monitor
+title: 进程监控告警
+description: 监控指定进程是否存在，异常时发送告警
+icon: 👁️
+category: diagnose
+
+questions:
+  - name: process_name
+    label: 进程名称
+    type: string
+    default: nginx
+    required: true
+  - name: min_count
+    label: 最少进程数
+    type: int
+    default: 1
+    min: 1
+    max: 100
+  - name: max_cpu
+    label: CPU 告警阈值 (%)
+    type: int
+    default: 90
+    min: 50
+    max: 100
+  - name: alert_cmd
+    label: 告警命令
+    type: string
+    default: "echo 'ALERT' | mail -s 'Process Alert' admin@example.com"
+    help: 进程异常时执行的命令
+  - name: add_crontab
+    label: 添加 Crontab (每分钟)
+    type: bool
+    default: true
+
+script: |
+  #!/bin/bash
+  PROC="{{ process_name }}"
+  MIN={{ min_count }}
+  MAX_CPU={{ max_cpu }}
+  COUNT=$(pgrep -c "$PROC" 2>/dev/null || echo 0)
+  alert() { {{ alert_cmd }}; }
+  if [ "$COUNT" -lt "$MIN" ]; then
+    echo "[ALERT] $PROC 进程数 $COUNT < $MIN"
+    alert
+    exit 1
+  fi
+  HIGH_CPU=$(ps aux | grep "$PROC" | grep -v grep | awk -v m=$MAX_CPU '$3 > m {print $2, $3}')
+  if [ -n "$HIGH_CPU" ]; then
+    echo "[ALERT] $PROC CPU 过高: $HIGH_CPU"
+    alert
+    exit 1
+  fi
+  echo "[OK] $PROC 进程数: $COUNT"
+  {% if add_crontab %}
+  # 首次运行添加 crontab
+  (crontab -l 2>/dev/null | grep -v process_monitor; echo "* * * * * $(realpath "$0") >> /var/log/process_monitor.log 2>&1") | crontab -
+  {% endif %}

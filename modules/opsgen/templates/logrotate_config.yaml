@@ -1,0 +1,83 @@
+name: logrotate_config
+title: Logrotate 配置
+description: 生成 logrotate 配置文件，控制日志轮转与压缩
+icon: 📋
+category: maintenance
+
+questions:
+  - name: log_path
+    label: 日志路径
+    type: string
+    default: /var/log/myapp/*.log
+    required: true
+  - name: rotate_count
+    label: 保留份数
+    type: int
+    default: 14
+    min: 1
+    max: 365
+  - name: rotate_freq
+    label: 轮转频率
+    type: choice
+    choices: [daily, weekly, monthly]
+    default: daily
+  - name: compress
+    label: 压缩旧日志
+    type: bool
+    default: true
+  - name: delay_compress
+    label: 延迟压缩
+    type: bool
+    default: true
+  - name: post_rotate
+    label: 轮转后命令
+    type: string
+    default: "systemctl reload myapp"
+    help: 留空则不执行
+
+computed:
+  config_name: "log_path.replace('/', '_').replace('*', 'star').strip('_')"
+
+script: |
+  #!/bin/bash
+  set -euo pipefail
+  CONF="/etc/logrotate.d/{{ config_name }}"
+  cat > "$CONF" <<'LOGROTATE_EOF'
+  {{ log_path }} {
+      {{ rotate_freq }}
+      rotate {{ rotate_count }}
+      missingok
+      notifempty
+  {% if compress %}
+      compress
+  {% endif %}
+  {% if delay_compress %}
+      delaycompress
+  {% endif %}
+      copytruncate
+  {% if post_rotate %}
+      postrotate
+          {{ post_rotate }}
+      endscript
+  {% endif %}
+  }
+  LOGROTATE_EOF
+  logrotate -d "$CONF"
+  echo "==> 配置已写入 $CONF"
+
+extra_outputs:
+  - name: logrotate.conf.snippet
+    content: |
+      {{ log_path }} {
+          {{ rotate_freq }}
+          rotate {{ rotate_count }}
+          missingok
+          notifempty
+      {% if compress %}
+          compress
+      {% endif %}
+      {% if delay_compress %}
+          delaycompress
+      {% endif %}
+          copytruncate
+      }

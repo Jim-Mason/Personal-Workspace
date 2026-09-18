@@ -1,0 +1,89 @@
+name: wireguard_vpn
+title: WireGuard VPN
+description: 安装 WireGuard 并生成服务端与客户端配置
+icon: 🔗
+category: security
+
+questions:
+  - name: server_ip
+    label: 服务器公网 IP
+    type: string
+    default: 1.2.3.4
+    required: true
+  - name: listen_port
+    label: 监听端口
+    type: int
+    default: 51820
+    min: 1
+    max: 65535
+  - name: vpn_subnet
+    label: VPN 网段
+    type: string
+    default: "10.8.0.0/24"
+  - name: client_name
+    label: 客户端名称
+    type: string
+    default: client1
+  - name: dns
+    label: 客户端 DNS
+    type: string
+    default: "1.1.1.1,8.8.8.8"
+  - name: forward_traffic
+    label: 转发所有流量
+    type: bool
+    default: true
+
+computed:
+  dns_list: "[d.strip() for d in dns.split(',') if d.strip()]"
+
+script: |
+  #!/bin/bash
+  set -euo pipefail
+  apt-get update -y && apt-get install -y wireguard qrencode
+  SERVER_PRIV=$(wg genkey)
+  SERVER_PUB=$(echo "$SERVER_PRIV" | wg pubkey)
+  CLIENT_PRIV=$(wg genkey)
+  CLIENT_PUB=$(echo "$CLIENT_PRIV" | wg pubkey)
+  cat > /etc/wireguard/wg0.conf <<EOF
+  [Interface]
+  Address = {{ vpn_subnet | replace('/24', '.1/24') }}
+  ListenPort = {{ listen_port }}
+  PrivateKey = $SERVER_PRIV
+  PostUp = iptables -A FORWARD -i wg0 -j ACCEPT; iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
+  PostDown = iptables -D FORWARD -i wg0 -j ACCEPT; iptables -t nat -D POSTROUTING -o eth0 -j MASQUERADE
+
+  [Peer]
+  PublicKey = $CLIENT_PUB
+  AllowedIPs = {{ vpn_subnet | replace('0/24', '2/32') }}
+  EOF
+  systemctl enable wg-quick@wg0 && systemctl start wg-quick@wg0
+  echo "==> WireGuard 服务端已启动，端口 {{ listen_port }}"
+
+extra_outputs:
+  - name: "{{ client_name }}.conf"
+    content: |
+      [Interface]
+      PrivateKey = CLIENT_PRIVATE_KEY_PLACEHOLDER
+      Address = {{ vpn_subnet | replace('0/24', '2/32') }}
+      DNS = {{ dns_list | join(', ') }}
+      {% if forward_traffic %}
+      AllowedIPs = 0.0.0.0/0, ::/0
+      {% else %}
+      AllowedIPs = {{ vpn_subnet }}
+      {% endif %}
+
+      [Peer]
+      PublicKey = SERVER_PUBLIC_KEY_PLACEHOLDER
+      Endpoint = {{ server_ip }}:{{ listen_port }}
+      PersistentKeepalive = 25
+
+  - name: setup_notes.txt
+    content: |
+      WireGuard 部署说明
+      ==================
+      服务端 IP: {{ server_ip }}
+      端口: {{ listen_port }}
+      VPN 网段: {{ vpn_subnet }}
+      
+      运行脚本后会输出密钥，请替换客户端配置中的 PLACEHOLDER
+      生成二维码: qrencode -t ansiutf8 < {{ client_name }}.conf

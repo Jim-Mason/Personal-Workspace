@@ -1,0 +1,54 @@
+name: tcpdump_capture
+title: Tcpdump 抓包
+description: 网络抓包脚本，支持过滤条件与自动轮转
+icon: 📡
+category: diagnose
+
+questions:
+  - name: interface
+    label: 网卡接口
+    type: string
+    default: eth0
+  - name: port
+    label: 端口过滤
+    type: int
+    default: 80
+    min: 1
+    max: 65535
+  - name: host_filter
+    label: 主机过滤
+    type: string
+    default: ""
+    help: 如 192.168.1.100，留空不过滤
+  - name: duration
+    label: 抓包时长 (秒)
+    type: int
+    default: 60
+    min: 5
+    max: 3600
+  - name: output_dir
+    label: 输出目录
+    type: string
+    default: /tmp/capture
+  - name: max_size_mb
+    label: 单文件最大 (MB)
+    type: int
+    default: 100
+    min: 10
+    max: 1024
+
+script: |
+  #!/bin/bash
+  IF="{{ interface }}"
+  DIR="{{ output_dir }}"
+  TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+  OUT="${DIR}/capture_${TIMESTAMP}.pcap"
+  mkdir -p "$DIR"
+  FILTER="port {{ port }}"
+  {% if host_filter %}
+  FILTER="host {{ host_filter }} and $FILTER"
+  {% endif %}
+  echo "==> 抓包 $IF 过滤: $FILTER 时长: {{ duration }}s"
+  timeout {{ duration }} tcpdump -i "$IF" -w "$OUT" -C {{ max_size_mb }} $FILTER
+  echo "==> 抓包完成: $OUT ($(du -h "$OUT" | cut -f1))"
+  echo "分析: tcpdump -r $OUT -nn | less"

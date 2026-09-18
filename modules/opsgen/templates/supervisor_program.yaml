@@ -1,0 +1,69 @@
+name: supervisor_program
+title: Supervisor 进程管理
+description: 使用 Supervisor 管理后台进程
+icon: 👔
+category: deploy
+
+questions:
+  - name: program_name
+    label: 程序名称
+    type: string
+    default: myworker
+    required: true
+  - name: command
+    label: 启动命令
+    type: string
+    default: "/opt/app/bin/worker --config /opt/app/config.yml"
+    required: true
+  - name: run_dir
+    label: 工作目录
+    type: string
+    default: /opt/app
+  - name: run_user
+    label: 运行用户
+    type: string
+    default: www-data
+  - name: autostart
+    label: 自动启动
+    type: bool
+    default: true
+  - name: autorestart
+    label: 自动重启
+    type: bool
+    default: true
+  - name: num_procs
+    label: 进程数
+    type: int
+    default: 1
+    min: 1
+    max: 32
+
+script: |
+  #!/bin/bash
+  set -euo pipefail
+  apt-get update -y && apt-get install -y supervisor
+  cat > /etc/supervisor/conf.d/{{ program_name }}.conf <<'SUP_EOF'
+  [program:{{ program_name }}]
+  command={{ command }}
+  directory={{ run_dir }}
+  user={{ run_user }}
+  autostart={% if autostart %}true{% else %}false{% endif %}
+  autorestart={% if autorestart %}true{% else %}false{% endif %}
+  numprocs={{ num_procs }}
+  stdout_logfile=/var/log/supervisor/{{ program_name }}.log
+  stderr_logfile=/var/log/supervisor/{{ program_name }}_err.log
+  SUP_EOF
+  supervisorctl reread && supervisorctl update
+  supervisorctl status {{ program_name }}
+  echo "==> Supervisor 程序 {{ program_name }} 已配置"
+
+extra_outputs:
+  - name: "{{ program_name }}.conf"
+    content: |
+      [program:{{ program_name }}]
+      command={{ command }}
+      directory={{ run_dir }}
+      user={{ run_user }}
+      autostart={% if autostart %}true{% else %}false{% endif %}
+      autorestart={% if autorestart %}true{% else %}false{% endif %}
+      numprocs={{ num_procs }}

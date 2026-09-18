@@ -1,0 +1,53 @@
+name: postgresql_install
+title: PostgreSQL 安装
+description: Ubuntu 安装 PostgreSQL 并创建数据库与用户
+icon: 🐘
+category: deploy
+
+questions:
+  - name: version
+    label: 版本
+    type: choice
+    choices: ["14", "15", "16"]
+    default: "16"
+  - name: db_name
+    label: 数据库名
+    type: string
+    default: myapp
+    required: true
+  - name: db_user
+    label: 用户名
+    type: string
+    default: myapp
+    required: true
+  - name: db_password
+    label: 密码
+    type: string
+    default: changeme
+    required: true
+  - name: listen_all
+    label: 允许远程连接
+    type: bool
+    default: false
+  - name: port
+    label: 端口
+    type: int
+    default: 5432
+    min: 1
+    max: 65535
+
+script: |
+  #!/bin/bash
+  set -euo pipefail
+  apt-get update -y
+  apt-get install -y postgresql-{{ version }} postgresql-contrib-{{ version }}
+  sed -i "s/^#port = .*/port = {{ port }}/" /etc/postgresql/{{ version }}/main/postgresql.conf
+  {% if listen_all %}
+  sed -i "s/^#listen_addresses = .*/listen_addresses = '*'/" /etc/postgresql/{{ version }}/main/postgresql.conf
+  echo "host all all 0.0.0.0/0 md5" >> /etc/postgresql/{{ version }}/main/pg_hba.conf
+  {% endif %}
+  systemctl restart postgresql
+  sudo -u postgres psql -c "CREATE USER {{ db_user }} WITH PASSWORD '{{ db_password }}';" 2>/dev/null || true
+  sudo -u postgres psql -c "CREATE DATABASE {{ db_name }} OWNER {{ db_user }};" 2>/dev/null || true
+  sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE {{ db_name }} TO {{ db_user }};"
+  echo "==> PostgreSQL {{ version }} 已安装，端口 {{ port }}"

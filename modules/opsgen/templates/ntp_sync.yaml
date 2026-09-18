@@ -1,0 +1,46 @@
+name: ntp_sync
+title: NTP 时间同步
+description: 配置 chrony/NTP 时间同步服务
+icon: 🕐
+category: deploy
+
+questions:
+  - name: ntp_servers
+    label: NTP 服务器
+    type: string
+    default: "ntp.aliyun.com,time.cloudflare.com,pool.ntp.org"
+    help: 逗号分隔
+  - name: timezone
+    label: 时区
+    type: choice
+    choices: [Asia/Shanghai, Asia/Tokyo, UTC]
+    default: Asia/Shanghai
+  - name: allow_network
+    label: 允许同步网段
+    type: string
+    default: ""
+    help: 作为 NTP 服务器时使用，如 10.0.0.0/8
+
+computed:
+  server_list: "[s.strip() for s in ntp_servers.split(',') if s.strip()]"
+
+script: |
+  #!/bin/bash
+  set -euo pipefail
+  timedatectl set-timezone {{ timezone }}
+  apt-get update -y && apt-get install -y chrony
+  cat > /etc/chrony/chrony.conf <<'CHRONY_EOF'
+  {% for server in server_list %}
+  server {{ server }} iburst
+  {% endfor %}
+  driftfile /var/lib/chrony/drift
+  makestep 1.0 3
+  rtcsync
+  {% if allow_network %}
+  allow {{ allow_network }}
+  {% endif %}
+  CHRONY_EOF
+  systemctl enable chrony && systemctl restart chrony
+  chronyc tracking
+  timedatectl status
+  echo "==> NTP 已配置"

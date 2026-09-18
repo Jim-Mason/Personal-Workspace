@@ -1,0 +1,84 @@
+name: systemd_service
+title: Systemd 服务单元
+description: 生成 systemd service 文件并启用服务
+icon: ⚙️
+category: deploy
+
+questions:
+  - name: service_name
+    label: 服务名称
+    type: string
+    default: myapp
+    required: true
+    pattern: "^[a-zA-Z0-9_-]+$"
+  - name: description
+    label: 服务描述
+    type: string
+    default: My Application Service
+  - name: exec_start
+    label: 启动命令
+    type: string
+    default: /opt/myapp/bin/start.sh
+    required: true
+  - name: working_dir
+    label: 工作目录
+    type: string
+    default: /opt/myapp
+  - name: run_user
+    label: 运行用户
+    type: string
+    default: www-data
+  - name: restart
+    label: 重启策略
+    type: choice
+    choices: [always, on-failure, no]
+    default: on-failure
+  - name: enable_on_boot
+    label: 开机自启
+    type: bool
+    default: true
+
+script: |
+  #!/bin/bash
+  set -euo pipefail
+  UNIT="/etc/systemd/system/{{ service_name }}.service"
+  cat > "$UNIT" <<'UNIT_EOF'
+  [Unit]
+  Description={{ description }}
+  After=network.target
+
+  [Service]
+  Type=simple
+  User={{ run_user }}
+  WorkingDirectory={{ working_dir }}
+  ExecStart={{ exec_start }}
+  Restart={{ restart }}
+  RestartSec=5
+
+  [Install]
+  WantedBy=multi-user.target
+  UNIT_EOF
+  systemctl daemon-reload
+  {% if enable_on_boot %}
+  systemctl enable {{ service_name }}
+  {% endif %}
+  systemctl restart {{ service_name }}
+  systemctl status {{ service_name }} --no-pager
+
+extra_outputs:
+  - name: "{{ service_name }}.service"
+    content: |
+      [Unit]
+      Description={{ description }}
+      After=network.target
+
+      [Service]
+      Type=simple
+      User={{ run_user }}
+      WorkingDirectory={{ working_dir }}
+      ExecStart={{ exec_start }}
+      Restart={{ restart }}
+      RestartSec=5
+
+      [Install]
+      WantedBy=multi-user.target

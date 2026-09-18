@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+
+{% block title %}版本对比{% endblock %}
+
+{% block content %}
+<section class="compare-page">
+  <div class="section-header">
+    <h1>🔀 版本对比</h1>
+  </div>
+
+  <div class="compare-tabs glass">
+    <a href="{{ url_for('compare_page', mode='template') }}" class="tab-btn {% if mode != 'history' %}active{% endif %}">模板 YAML</a>
+    <a href="{{ url_for('compare_page', mode='history') }}" class="tab-btn {% if mode == 'history' %}active{% endif %}">历史脚本</a>
+  </div>
+
+  {% if mode == 'history' %}
+  <form class="template-toolbar glass compare-form" method="GET" action="{{ url_for('compare_page') }}">
+    <input type="hidden" name="mode" value="history">
+    <div class="toolbar-row">
+      <select name="id1" class="form-input toolbar-select" required>
+        <option value="">记录 A</option>
+        {% for entry in history_entries %}
+        <option value="{{ entry.id }}" {% if request.args.get('id1') == entry.id %}selected{% endif %}>
+          {{ entry.title }} · {{ entry.created_at[:16] | replace('T', ' ') }}
+        </option>
+        {% endfor %}
+      </select>
+      <span class="compare-vs">vs</span>
+      <select name="id2" class="form-input toolbar-select" required>
+        <option value="">记录 B</option>
+        {% for entry in history_entries %}
+        <option value="{{ entry.id }}" {% if request.args.get('id2') == entry.id %}selected{% endif %}>
+          {{ entry.title }} · {{ entry.created_at[:16] | replace('T', ' ') }}
+        </option>
+        {% endfor %}
+      </select>
+      <button type="submit" class="btn btn-primary btn-sm">对比</button>
+    </div>
+  </form>
+  {% else %}
+  <form class="template-toolbar glass compare-form" method="GET" action="{{ url_for('compare_page') }}">
+    <input type="hidden" name="mode" value="template">
+    <div class="toolbar-row">
+      <input type="text" name="name" class="form-input" style="max-width:160px" placeholder="模板 name"
+             value="{{ request.args.get('name', '') }}" required list="template-names">
+      <datalist id="template-names">
+        {% for ver in version_service_list %}{% endfor %}
+      </datalist>
+      <select name="v1" class="form-input toolbar-select">
+        <option value="current" {% if request.args.get('v1', 'current') == 'current' %}selected{% endif %}>当前</option>
+        {% for ver in version_service_list %}
+        <option value="{{ ver.id }}" {% if request.args.get('v1') == ver.id %}selected{% endif %}>{{ ver.id[:8] }} ({{ ver.created_at[5:16] | replace('T',' ') }})</option>
+        {% endfor %}
+      </select>
+      <span class="compare-vs">vs</span>
+      <select name="v2" class="form-input toolbar-select" required>
+        <option value="">版本 B</option>
+        <option value="current" {% if request.args.get('v2') == 'current' %}selected{% endif %}>当前</option>
+        {% for ver in version_service_list %}
+        <option value="{{ ver.id }}" {% if request.args.get('v2') == ver.id %}selected{% endif %}>{{ ver.id[:8] }} ({{ ver.created_at[5:16] | replace('T',' ') }})</option>
+        {% endfor %}
+      </select>
+      <button type="submit" class="btn btn-primary btn-sm">对比</button>
+    </div>
+  </form>
+  {% endif %}
+
+  {% if error %}
+  <div class="alert alert-error glass">{{ error }}</div>
+  {% endif %}
+
+  {% if result %}
+  <div class="compare-summary glass">
+    <div class="compare-labels">
+      <span class="diff-tag diff-del">− {{ result.stats.removed }} 行</span>
+      <span class="diff-tag diff-add">+ {{ result.stats.added }} 行</span>
+      {% if result.identical %}
+      <span class="diff-tag identical">完全相同</span>
+      {% endif %}
+    </div>
+    <div class="compare-names">
+      <span>{{ result.label_a }}</span>
+      <span>→</span>
+      <span>{{ result.label_b }}</span>
+    </div>
+  </div>
+  <div class="diff-view glass">{{ result.diff_html | safe }}</div>
+  {% endif %}
+</section>
+{% endblock %}

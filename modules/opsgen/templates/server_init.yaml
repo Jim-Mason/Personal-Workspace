@@ -1,0 +1,146 @@
+name: server_init
+title: 服务器初始化脚本
+description: 新服务器基础配置，包含主机名、时区、用户、SSH 及常用工具安装
+icon: 🖥️
+category: deploy
+
+questions:
+  - name: hostname
+    label: 主机名
+    type: string
+    default: prod-server-01
+    required: true
+    pattern: "^[a-zA-Z0-9][a-zA-Z0-9.-]*$"
+
+  - name: timezone
+    label: 时区
+    type: choice
+    choices:
+      - Asia/Shanghai
+      - Asia/Tokyo
+      - UTC
+      - America/New_York
+      - Europe/London
+    default: Asia/Shanghai
+
+  - name: create_user
+    label: 创建运维用户
+    type: bool
+    default: true
+
+  - name: username
+    label: 用户名
+    type: string
+    default: ops
+    required: true
+    show_when:
+      create_user: true
+
+  - name: ssh_port
+    label: SSH 端口
+    type: int
+    default: 22
+    min: 1
+    max: 65535
+    required: true
+
+  - name: disable_root_login
+    label: 禁止 root SSH 登录
+    type: bool
+    default: true
+
+  - name: tools
+    label: 安装常用工具
+    type: multi
+    choices:
+      - htop
+      - iftop
+      - iotop
+      - vim
+      - curl
+      - wget
+      - git
+      - net-tools
+      - unzip
+      - jq
+    default:
+      - htop
+      - curl
+      - vim
+      - git
+
+  - name: enable_firewall
+    label: 启用 UFW 防火墙
+    type: bool
+    default: true
+
+script: |
+  #!/bin/bash
+  # 服务器初始化脚本
+  # 主机名: {{ hostname }} | 时区: {{ timezone }}
+  set -euo pipefail
+
+  echo "==> 更新系统软件包..."
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get update -y
+  apt-get upgrade -y
+
+  echo "==> 设置主机名: {{ hostname }}"
+  hostnamectl set-hostname "{{ hostname }}"
+  grep -q "{{ hostname }}" /etc/hosts || echo "127.0.1.1 {{ hostname }}" >> /etc/hosts
+
+  echo "==> 设置时区: {{ timezone }}"
+  timedatectl set-timezone "{{ timezone }}"
+
+  {% if create_user %}
+  echo "==> 创建用户: {{ username }}"
+  if ! id "{{ username }}" &>/dev/null; then
+      useradd -m -s /bin/bash "{{ username }}"
+      usermod -aG sudo "{{ username }}"
+      mkdir -p /home/{{ username }}/.ssh
+      chmod 700 /home/{{ username }}/.ssh
+      if [ -f /root/.ssh/authorized_keys ]; then
+          cp /root/.ssh/authorized_keys /home/{{ username }}/.ssh/
+          chown -R {{ username }}:{{ username }} /home/{{ username }}/.ssh
+          chmod 600 /home/{{ username }}/.ssh/authorized_keys
+      fi
+      echo "{{ username }} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/{{ username }}
+  fi
+  {% endif %}
+
+  echo "==> 配置 SSH (端口 {{ ssh_port }})..."
+  sed -i 's/^#\?Port .*/Port {{ ssh_port }}/' /etc/ssh/sshd_config
+  sed -i 's/^#\?PermitRootLogin .*/PermitRootLogin {% if disable_root_login %}no{% else %}yes{% endif %}/' /etc/ssh/sshd_config
+  sed -i 's/^#\?PasswordAuthentication .*/PasswordAuthentication no/' /etc/ssh/sshd_config
+  systemctl restart sshd || systemctl restart ssh
+
+  {% if tools %}
+  echo "==> 安装工具: {{ tools | join(', ') }}"
+  apt-get install -y {% for tool in tools %}{{ tool }} {% endfor %}
+  {% endif %}
+
+  {% if enable_firewall %}
+  echo "==> 配置 UFW 防火墙..."
+  ufw --force reset
+  ufw default deny incoming
+  ufw default allow outgoing
+  ufw allow {{ ssh_port }}/tcp
+  ufw --force enable
+  {% endif %}
+
+  echo "==> 系统优化..."
+  cat >> /etc/sysctl.conf <<'SYSCTL_EOF'
+  net.core.somaxconn = 65535
+  net.ipv4.tcp_max_syn_backlog = 65535
+  net.ipv4.ip_local_port_range = 1024 65535
+  vm.swappiness = 10
+  SYSCTL_EOF
+  sysctl -p
+
+  echo "===== 服务器初始化完成 ====="
+  echo "主机名: $(hostname)"
+  echo "时区: $(timedatectl show --property=Timezone --value)"
+  echo "SSH 端口: {{ ssh_port }}"
+  {% if create_user %}
+  echo "运维用户: {{ username }}"
+  {% endif %}

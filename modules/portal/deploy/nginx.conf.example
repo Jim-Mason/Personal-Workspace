@@ -1,0 +1,81 @@
+# ============================================================
+# 开发工具箱 —— nginx 反向代理示例
+#
+# 适用场景：门户需要 HTTPS、独立域名或与其它站点共用 80/443 时，
+# 把 nginx 放在最前面，由它转发到本机 8000 端口。
+#
+# 注意几个必须项：
+#   1. WebSocket 升级头（内网系统有实时推送页面时需要）
+#   2. proxy_buffering off（避免长连接 / SSE 被缓冲）
+#   3. 放大 client_max_body_size（「文件预览」这类上传功能需要）
+#   4. 关闭 proxy_request_buffering 可让大文件边收边转
+#
+# 用 HTTPS 对外时，务必同时把 .env 里的 COOKIE_SECURE 改为 true，
+# 否则浏览器会丢弃带 Secure 的登录 Cookie。
+# ============================================================
+
+# 放在 http {} 块内：把 Upgrade 头映射成 Connection 值
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      close;
+}
+
+server {
+    listen 80;
+    server_name toolbox.example.internal;
+
+    # 与 .env 的 PROXY_MAX_BODY_BYTES 对齐（默认 64m）
+    client_max_body_size 64m;
+
+    access_log /var/log/nginx/dev-toolbox.access.log;
+    error_log  /var/log/nginx/dev-toolbox.error.log;
+
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # WebSocket / SSE
+        proxy_set_header Upgrade    $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+
+        # 内网系统可能响应很慢，读超时要大于 .env 里的 PROXY_TIMEOUT_SECONDS
+        proxy_connect_timeout 15s;
+        proxy_send_timeout    300s;
+        proxy_read_timeout    300s;
+
+        # 不缓冲响应，长轮询 / 流式下载才能及时到达浏览器
+        proxy_buffering off;
+        proxy_request_buffering off;
+    }
+}
+
+# ---- 如需 HTTPS，参考下面这段（证书路径自行替换）----
+# server {
+#     listen 443 ssl;
+#     http2 on;
+#     server_name toolbox.example.internal;
+#
+#     ssl_certificate     /etc/nginx/ssl/toolbox.crt;
+#     ssl_certificate_key /etc/nginx/ssl/toolbox.key;
+#     ssl_protocols       TLSv1.2 TLSv1.3;
+#
+#     client_max_body_size 64m;
+#
+#     location / {
+#         proxy_pass http://127.0.0.1:8000;
+#         proxy_http_version 1.1;
+#         proxy_set_header Host              $host;
+#         proxy_set_header X-Real-IP         $remote_addr;
+#         proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+#         proxy_set_header X-Forwarded-Proto $scheme;
+#         proxy_set_header Upgrade           $http_upgrade;
+#         proxy_set_header Connection        $connection_upgrade;
+#         proxy_read_timeout 300s;
+#         proxy_buffering off;
+#     }
+# }

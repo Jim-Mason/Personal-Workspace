@@ -1,0 +1,43 @@
+# 行尾策略：**仓库里一律存 LF**，检出时按文件类型还原。
+#
+# 为什么必须显式写死，而不是靠 `core.autocrlf`：
+#
+# 1. `start.bat` 必须是 CRLF。这个项目踩过一个很难查的坑 ——
+#    cmd.exe 解码 .bat 用的是控制台代码页，对行尾极敏感；UTF-8 无 BOM + LF 行尾 +
+#    中文注释三样凑一起时它会算错行偏移，把注释里的词当成命令执行，
+#    而且报错位置和真正出问题的行毫无关系。所以 .bat 的行尾不许被任何人改。
+# 2. `deploy/*.sh`、`dev-toolbox.service` 是给 Linux 用的，**绝不能**变成 CRLF，
+#    否则在服务器上直接报 `bad interpreter: /bin/bash^M`。
+#
+# 靠"每个人自己配 autocrlf"是保不住的 —— 换台机器、换个 IDE 就可能变。
+# 写进 .gitattributes 才对所有克隆者生效。
+
+* text=auto eol=lf
+
+# Windows 专用，必须 CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Linux 专用，必须 LF（别动）
+*.sh text eol=lf
+*.service text eol=lf
+
+# 图片与字体：二进制，不做任何转换
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+
+# 数据库与压缩包
+*.db binary
+*.zip binary
+*.gz binary
+
+# 截图在 GitHub 上按二进制处理，避免被当成文本 diff
+docs/screenshots/*.png binary

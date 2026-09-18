@@ -1,0 +1,83 @@
+name: fail2ban_setup
+title: Fail2ban 防护配置
+description: 安装 Fail2ban 并配置 SSH / Nginx 暴力破解防护
+icon: 🛡️
+category: security
+
+questions:
+  - name: ban_time
+    label: 封禁时长 (秒)
+    type: int
+    default: 3600
+    min: 60
+    max: 86400
+  - name: max_retry
+    label: 最大重试次数
+    type: int
+    default: 5
+    min: 1
+    max: 20
+  - name: find_time
+    label: 检测窗口 (秒)
+    type: int
+    default: 600
+    min: 60
+    max: 3600
+  - name: protect_ssh
+    label: 防护 SSH
+    type: bool
+    default: true
+  - name: protect_nginx
+    label: 防护 Nginx
+    type: bool
+    default: true
+  - name: ssh_port
+    label: SSH 端口
+    type: int
+    default: 22
+    min: 1
+    max: 65535
+    show_when:
+      protect_ssh: true
+  - name: alert_email
+    label: 告警邮箱
+    type: string
+    default: ""
+    help: 留空不发送邮件
+
+script: |
+  #!/bin/bash
+  set -euo pipefail
+  apt-get update -y && apt-get install -y fail2ban
+  cat > /etc/fail2ban/jail.local <<'JAIL_EOF'
+  [DEFAULT]
+  bantime = {{ ban_time }}
+  findtime = {{ find_time }}
+  maxretry = {{ max_retry }}
+  {% if alert_email %}
+  destemail = {{ alert_email }}
+  action = %(action_mwl)s
+  {% endif %}
+
+  {% if protect_ssh %}
+  [sshd]
+  enabled = true
+  port = {{ ssh_port }}
+  filter = sshd
+  logpath = /var/log/auth.log
+  {% endif %}
+
+  {% if protect_nginx %}
+  [nginx-http-auth]
+  enabled = true
+  filter = nginx-http-auth
+  logpath = /var/log/nginx/error.log
+
+  [nginx-botsearch]
+  enabled = true
+  filter = nginx-botsearch
+  logpath = /var/log/nginx/access.log
+  {% endif %}
+  JAIL_EOF
+  systemctl enable fail2ban && systemctl restart fail2ban
+  fail2ban-client status

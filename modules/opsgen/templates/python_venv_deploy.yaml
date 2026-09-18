@@ -1,0 +1,67 @@
+name: python_venv_deploy
+title: Python 虚拟环境部署
+description: 创建 Python venv 并部署 WSGI/ASGI 应用
+icon: 🐍
+category: deploy
+
+questions:
+  - name: app_name
+    label: 应用名称
+    type: string
+    default: myapi
+    required: true
+  - name: app_dir
+    label: 应用目录
+    type: string
+    default: /opt/myapi
+  - name: python_version
+    label: Python 版本
+    type: choice
+    choices: ["3.10", "3.11", "3.12"]
+    default: "3.11"
+  - name: requirements_file
+    label: requirements 文件
+    type: string
+    default: requirements.txt
+  - name: wsgi_module
+    label: WSGI 模块
+    type: string
+    default: "app:app"
+    help: 如 app:app 或 main:application
+  - name: workers
+    label: Gunicorn Workers
+    type: int
+    default: 4
+    min: 1
+    max: 32
+  - name: bind_port
+    label: 绑定端口
+    type: int
+    default: 8000
+    min: 1
+    max: 65535
+
+script: |
+  #!/bin/bash
+  set -euo pipefail
+  apt-get update -y
+  apt-get install -y python{{ python_version }} python{{ python_version }}-venv python3-pip
+  mkdir -p {{ app_dir }}
+  python{{ python_version }} -m venv {{ app_dir }}/venv
+  source {{ app_dir }}/venv/bin/activate
+  pip install --upgrade pip gunicorn
+  [ -f {{ app_dir }}/{{ requirements_file }} ] && pip install -r {{ app_dir }}/{{ requirements_file }}
+  cat > /etc/systemd/system/{{ app_name }}.service <<EOF
+  [Unit]
+  Description={{ app_name }} Gunicorn
+  After=network.target
+  [Service]
+  User=www-data
+  WorkingDirectory={{ app_dir }}
+  ExecStart={{ app_dir }}/venv/bin/gunicorn --workers {{ workers }} --bind 0.0.0.0:{{ bind_port }} {{ wsgi_module }}
+  Restart=always
+  [Install]
+  WantedBy=multi-user.target
+  EOF
+  systemctl daemon-reload && systemctl enable --now {{ app_name }}
+  echo "==> {{ app_name }} 运行在 :{{ bind_port }}"

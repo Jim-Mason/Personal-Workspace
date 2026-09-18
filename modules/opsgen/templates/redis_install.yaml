@@ -1,0 +1,60 @@
+name: redis_install
+title: Redis 安装配置
+description: Ubuntu 安装 Redis，支持密码、内存限制与持久化策略
+icon: 🔴
+category: deploy
+
+questions:
+  - name: port
+    label: 监听端口
+    type: int
+    default: 6379
+    min: 1
+    max: 65535
+    required: true
+  - name: password
+    label: 访问密码
+    type: string
+    default: ""
+    help: 留空则不设置密码
+  - name: maxmemory
+    label: 最大内存 (MB)
+    type: int
+    default: 256
+    min: 64
+    max: 65536
+  - name: persistence
+    label: 持久化策略
+    type: choice
+    choices: [rdb, aof, none]
+    default: rdb
+  - name: bind_local
+    label: 仅本地访问
+    type: bool
+    default: true
+
+script: |
+  #!/bin/bash
+  set -euo pipefail
+  echo "==> 安装 Redis..."
+  apt-get update -y && apt-get install -y redis-server
+  CONF="/etc/redis/redis.conf"
+  sed -i 's/^supervised no/supervised systemd/' "$CONF"
+  sed -i 's/^# maxmemory .*/maxmemory {{ maxmemory }}mb/' "$CONF"
+  sed -i 's/^port .*/port {{ port }}/' "$CONF"
+  {% if bind_local %}
+  sed -i 's/^bind .*/bind 127.0.0.1/' "$CONF"
+  {% else %}
+  sed -i 's/^bind .*/bind 0.0.0.0/' "$CONF"
+  {% endif %}
+  {% if password %}
+  sed -i 's/^# requirepass .*/requirepass {{ password }}/' "$CONF"
+  {% endif %}
+  {% if persistence == 'aof' %}
+  sed -i 's/^appendonly no/appendonly yes/' "$CONF"
+  {% elif persistence == 'none' %}
+  sed -i 's/^save /# save /' "$CONF"
+  {% endif %}
+  systemctl enable redis-server && systemctl restart redis-server
+  redis-cli -p {{ port }} {% if password %}-a '{{ password }}' {% endif %}ping
+  echo "==> Redis 已启动，端口 {{ port }}"
