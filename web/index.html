@@ -297,6 +297,32 @@
   </div>
 </div>
 
+<!-- 令牌失效时的常驻提示。
+     为什么不用一条 toast：这个错以前是以「读取模块列表失败：缺少或错误的访问令牌
+     （模块页面的凭据只在它自己的路径下有效）」的红条出现的 —— 3 秒就消失，
+     措辞还讲的是"模块路径"，非常容易被理解成"模块坏了"。
+     而真相是：页面外壳照常渲染，但**所有接口都 401**，也就是没进门。
+     这条提示要说清这三件事：发生了什么、为什么、怎么恢复。 -->
+<div class="token-problem" id="token-problem" hidden role="alert">
+  <div class="token-problem-card">
+    <h2>访问令牌不对，接口全部被拒</h2>
+    <p>
+      这个页面手里的令牌和当前服务对不上（接口都返回 <code>401</code>）。
+      页面外壳仍会正常显示，但概览、本机资产、模块列表都拉不到数据 ——
+      <strong>看着像"模块坏了"，其实是没进门</strong>。
+    </p>
+    <p>两种常见原因：</p>
+    <ul>
+      <li>用的是<strong>旧地址</strong>：书签或历史记录里那串带 <code>?token=</code> 的链接已经过期</li>
+      <li>浏览器会话里留着<strong>上一次的令牌</strong>（换过数据目录、或删过 <code>data/.token</code> 才会这样）</li>
+    </ul>
+    <p>
+      <strong>怎么恢复：</strong>回到 <code>start.bat</code> 那个窗口，点它打印出来的
+      <em>访问地址</em> —— 那里的令牌永远是最新的。
+    </p>
+  </div>
+</div>
+
 <div class="toast" id="toast" hidden></div>
 <script src="/app.js"></script>
 </body>

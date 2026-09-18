@@ -856,6 +856,55 @@ td.col-time { font-family: var(--mono); font-size: 12px; color: var(--text-2); w
   to   { opacity: 1; transform: translate(-50%, 0); }
 }
 
+/* 令牌失效的常驻提示。
+   刻意做成"盖住内容区"而不是像 toast 那样飘一条：它不是一次性反馈，
+   而是一个挡住所有数据的状态 —— 消失掉反而会让人以为已经好了。 */
+.token-problem {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: color-mix(in srgb, var(--bg) 78%, transparent);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  animation: fade-in 0.24s ease both;
+}
+
+.token-problem-card {
+  width: min(620px, 92vw);
+  max-height: 86vh;
+  overflow: auto;
+  padding: 24px 26px;
+  border-radius: var(--radius);
+  border: 1px solid color-mix(in srgb, #e5484d 40%, var(--border));
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-2);
+  font-size: 13.5px;
+  line-height: 1.75;
+}
+
+.token-problem-card h2 {
+  margin: 0 0 12px;
+  font-size: 17px;
+  color: #e5484d;
+}
+
+.token-problem-card p { margin: 0 0 10px; }
+.token-problem-card ul { margin: 0 0 12px; padding-left: 20px; }
+.token-problem-card li { margin-bottom: 4px; }
+.token-problem-card code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--surface-2);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 12.5px;
+}
+.token-problem-card em { font-style: normal; font-weight: 600; }
+.token-problem-card strong { font-weight: 600; }
+
 /* ================================================================ 外观抽屉 */
 .drawer-mask {
   position: fixed;

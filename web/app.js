@@ -49,6 +49,27 @@
 
   var TOKEN = readToken();
 
+  /* ------------------------------------------------------------ 令牌失效 */
+  // 令牌不对时，页面外壳照常渲染，但**所有接口都 401** —— 这个状态极容易
+  // 被误解成"模块坏了"：原来的表现就是一条 3 秒就消失的红条
+  // （「读取模块列表失败：缺少或错误的访问令牌」）+ 一个空空的模块列表。
+  //
+  // 所以这里做两件事：
+  //   1. 竖起一条**常驻**提示，把"发生了什么 / 为什么 / 怎么恢复"说清楚
+  //   2. **停掉模块轮询** —— 否则它每几秒就触发一次同样的错，越看越糊涂
+  var tokenProblem = false;
+
+  function flagTokenProblem() {
+    if (tokenProblem) return;
+    tokenProblem = true;
+    var box = $('token-problem');
+    if (box) box.hidden = false;
+    if (state.moduleTimer) {
+      clearInterval(state.moduleTimer);
+      state.moduleTimer = null;
+    }
+  }
+
   /* ------------------------------------------------------------ 请求 */
   function api(path, options) {
     var opts = options || {};
@@ -63,6 +84,9 @@
         })
         .then(function (data) {
           if (!res.ok) {
+            // 401 = 令牌不对。这不只是"这一次请求失败" —— 它意味着后面每个
+            // 接口都会失败，所以竖常驻提示，而不是让调用方弹一条就走。
+            if (res.status === 401) flagTokenProblem();
             throw new Error((data && data.detail) || '请求失败（HTTP ' + res.status + '）');
           }
           return data;
@@ -128,6 +152,9 @@
 
   var toastTimer = null;
   function toast(message, isError) {
+    // 令牌问题已经由常驻提示说明清楚了，这里别再插一条 3 秒就消失的红条 ——
+    // 模块轮询会每几秒触发一次，弹起来只会让人以为"一直在坏、不知道怎么办"。
+    if (isError && tokenProblem) return;
     var el = $('toast');
     el.textContent = message;
     el.classList.toggle('is-error', !!isError);
