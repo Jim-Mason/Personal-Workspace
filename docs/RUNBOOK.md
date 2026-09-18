@@ -359,7 +359,11 @@ git pull
 - [ ] 跑一遍自检，五个模块全过：
       `check_modules.py --module inventory`（12 项）、`--module filelist`（18 项）、
       `--module opsgen`（34 项）、`--module logviz`（20 项）、`--module portal`（23 项）
-- [ ] **改过鉴权就跑 `backend\scripts\check_auth.py --log`**（32 项）——
+- [ ] **改过模块五的解析器就跑 `modules\logviz\selftest_parsers.py`**（66 项）——
+      它查的是解析质量：三种日志的排版变体、异常栈合并、指纹归一、TopN 排序。
+      **不需要服务在跑**，改完解析逻辑立刻能验。和上面那个 20 项不是一回事：
+      20 项查的是模块内核（页面托管 / 资源逐字节 / 越界拒绝 / 源码白名单）
+- [ ] **改过鉴权就跑 `backend\scripts\check_auth.py --log`**（28 项）——
       它验令牌 / 浏览器会话 / 模块票据三条通道的边界。**这个不需要服务在跑**：
       模块的内部端口是模块自己写死的，本机没法再起第二个实例做"干净环境"的检查
       （第二个实例要么撞端口，要么被接管到第一个实例的进程上，拿到的票据是别人的，

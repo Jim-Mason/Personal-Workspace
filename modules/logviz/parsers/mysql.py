@@ -203,7 +203,14 @@ def split_queries(rows: list[tuple[int, str]]) -> list[SlowQuery]:
                     current.rows_sent = int(metrics.group("rows_sent"))
                     current.rows_examined = int(metrics.group("rows_examined"))
             elif key == "schema":
-                current.db = value.strip() or current.db
+                # MySQL 这一行**不止有库名**：
+                #     # Schema: chengyi_iot  Last_errno: 0  Killed: 0
+                # 库名是第一个词，后面还挂着 Last_errno / Killed 之类。
+                # 早先直接 `value.strip()`，于是榜上出现的是
+                # `chengyi_iot  Last_errno: 0  Killed: 0` 这么一长串 ——
+                # 同一个库会因为 Last_errno 不同被拆成好几条。
+                first = value.strip().split()[0] if value.strip() else ""
+                current.db = first or current.db
             continue
 
         if _SET_TIMESTAMP_RE.match(stripped):

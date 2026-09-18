@@ -91,6 +91,24 @@ else:
     )
 
 
+def _run_count(argv: list[str]) -> int:
+    """跑一个自检脚本，从它的合计行里取项数。拿不到就返回 0。"""
+    out = subprocess.run(
+        argv, capture_output=True, text=True, encoding="utf-8", errors="replace",
+        cwd=str(ROOT),
+    ).stdout
+    m = re.search(r"合计 (\d+) 项", out)
+    return int(m.group(1)) if m else 0
+
+
+#: 不连服务的两个自检脚本的**实际**项数。这两个脚本不需要中台在跑，
+#: 所以随时都能数 —— 也是文档里最容易随迭代变旧的两个数字。
+#: （2026-09-18 发现 RUNBOOK 里 check_auth 写着 32 项、实际是 28 项，
+#:   而当时的判据只盯 check_modules 的五个模块，这个数字没人看着。）
+AUTH_COUNT = _run_count([sys.executable, str(ROOT / "backend/scripts/check_auth.py")])
+PARSER_COUNT = _run_count([sys.executable, str(ROOT / "modules/logviz/selftest_parsers.py")])
+
+
 def read(rel: str) -> str:
     return (ROOT / rel).read_text(encoding="utf-8")
 
@@ -186,6 +204,28 @@ if counts:
                 check("B 分模块自检", f"文档称 {mid} 为 {value} 项", f"实际 {n} 项", ok)
 
 check("B 平台端口", "四份文档里的 8731", "应出现", all(PLATFORM_PORT in t for t in texts.values()))
+
+# ------------------------------------------------------------------ 另两个自检
+# 这两条是 2026-09-18 补的判据缺口：当时 RUNBOOK 里写着 check_auth 是 32 项，
+# 实际跑出来 28 项 —— 而原有判据只盯 check_modules 的五个模块，没人看着这个数字。
+# 它们**不连服务**，所以不受"实例太旧"影响，数出来是多少就是多少，没有误报空间。
+def _doc_counts_after(name: str) -> list[str]:
+    """把文档里出现在某个脚本名附近的「N 项」都抠出来。
+
+    窗口给得宽（200 字符）：文档里常见「脚本名 + 一句说明 +（N 项）」的写法，
+    窗口太窄会漏掉带说明的那几处 —— 漏掉一处就等于这条判据没生效。
+    """
+    return re.findall(rf"{re.escape(name)}\D{{0,200}}?(\d+)\s*项", all_md)
+
+
+if AUTH_COUNT:
+    for value in set(_doc_counts_after("check_auth")):
+        check("B 鉴权自检数", f"文档称 check_auth 为 {value} 项", f"实际 {AUTH_COUNT} 项",
+              int(value) == AUTH_COUNT)
+if PARSER_COUNT:
+    for value in set(_doc_counts_after("selftest_parsers")):
+        check("B 解析器自检数", f"文档称解析器自检为 {value} 项", f"实际 {PARSER_COUNT} 项",
+              int(value) == PARSER_COUNT)
 
 # 版本号：以「版本脉络」里最新那条为准，别再写死一个字面量 ——
 # 写死过一次，改版本时它就变成一条永远删不掉的假警报。

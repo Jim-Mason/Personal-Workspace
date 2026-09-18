@@ -119,6 +119,11 @@ _LOGGER_RE = re.compile(r"([\w.$]+)$")
 #: 括号/方括号里的线程名，统计时归一
 _THREAD_RE = re.compile(r"\[[^\]]*\]")
 
+#: Spring Boot 那个 `12345 --- ` 段。**前面的空白要一起吃掉**：
+#: 头行正则把级别之后的整段给了 tail，raw 文本是 ` 12345 --- [t] ...`，
+#: 少匹配那个空格就会在剥完之后留下一个孤立空格。
+_PID_RE = re.compile(r"^\s*\d+\s+---\s*")
+
 
 def sniff(rows: list[tuple[int, str]], sample: int = 80) -> float:
     """有多少把握是 Java 应用日志。返回 0~1。"""
@@ -481,15 +486,71 @@ def _head_parts(text: str) -> tuple[str, str, str, str, str] | None:
     level = (parts.get("lvl_a") or parts.get("lvl_b") or "").upper()
     if level == "WARNING":
         level = "WARN"
-    tail = parts.get("tail_a") if parts.get("lvl_a") else parts.get("tail_b")
-    tail = tail or ""
     if parts.get("lvl_a"):
-        # A 分支（方括号级别）没有 mid，那一整段都落在 tail 里：
-        # `app.boot: 启动中台` 这种，logger 要从 tail 里取
+        # A 分支（方括号级别）：`[INFO ] app.boot: 启动中台` —— 没有 mid，
+        # logger 就在 tail 开头。
+        tail = parts.get("tail_a") or ""
         logger, thread = _split_from_tail(tail)
-    else:
-        logger, thread = _split_mid(parts.get("mid") or "", text)
+        return level, logger, thread, tail, parts.get("ts") or ""
+
+    mid = parts.get("mid") or ""
+    tail = parts.get("tail_b") or ""
+    if not mid:
+        # ⚠️ B 分支最常见的排版恰恰是 **mid 为空** 的那种 ——
+        # Spring Boot 的 `2026-09-18 14:03:11.100 ERROR 12345 --- [t] c.c.Svc : msg`：
+        # 时间戳之后紧跟级别，于是 PID / 线程 / logger **全都落在 tail_b 里**。
+        # 早先这里直接把 tail 原样交出去，`_message_from_tail` 拿到的
+        # 以 PID 打头（` 12345 --- [http-nio-...] c.c.OrderService : ...`），
+        # 而它只会切"以 logger 开头"的前缀 —— 于是 logger 切不掉，
+        # 消息指纹里就永远留着 `<n> --- [http-nio-<n>-exec-<n>] c.c.Xxx : `。
+        # 现象是消息榜上每条都带着一截噪音前缀，而且同一件事来自不同线程时
+        # 会被算成不同的消息。
+        logger, thread, tail = _split_b_prefix(tail)
+        return level, logger, thread, tail, parts.get("ts") or ""
+
+    logger, thread = _split_mid(mid, text)
     return level, logger, thread, tail, parts.get("ts") or ""
+
+
+def _split_b_prefix(tail: str) -> tuple[str, str, str]:
+    """B 分支中 `mid` 为空时，从 tail 开头剥出「PID / 线程 / logger」，返回剩余正文。
+
+    处理的就是这一种排版：
+
+         ERROR 12345 --- [http-nio-8080-exec-1] c.c.OrderService : 下单失败 orderId=88213
+               └PID┘        └──── 线程名 ────┘ └──── logger ────┘ └── 消息正文 ──┘
+
+    剥的顺序必须是 PID → 线程 → logger → 分隔符，逐段吃进去，
+    **只要有一段落空就立刻停下并原样返回**（宁可少切，不可把正文当噪音切掉 ——
+    切多了会让两条本该不同的消息归成一条，比切少更糟）。
+    """
+    rest = tail
+    m = _PID_RE.match(rest)
+    if not m:
+        return "", "", tail
+    rest = rest[m.end():]
+
+    thread = ""
+    t = _THREAD_RE.match(rest)
+    if t:
+        thread = t.group(0)[1:-1]
+        rest = rest[t.end():]
+    elif rest.strip():
+        # 有 PID 但没有线程段：不能确定后面是不是 logger，保守起见不切
+        return "", thread, tail
+
+    rest = rest.lstrip()
+    head = re.split(r"\s+[-:|]\s+|\s*[-:]\s", rest, maxsplit=1)[0].strip()
+    if not re.fullmatch(r"[\w.$]{3,}", head):
+        # logger 段长得不像标识符 —— 说明这行不是我们以为的排版，
+        # 退回原样，交给后面的通用逻辑
+        return "", thread, tail
+
+    rest = rest[len(head):]
+    rest = rest.lstrip()
+    if rest[:1] in (":", "-", "|"):
+        rest = rest[1:]
+    return _short_logger(head), thread, rest.lstrip()
 
 
 def message_of(text: str) -> str | None:

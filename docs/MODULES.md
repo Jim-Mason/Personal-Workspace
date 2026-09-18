@@ -412,6 +412,17 @@ backend\scripts\check_modules.py --module portal      # 模块三（23 项）
 backend\scripts\check_modules.py --template nginx     # 换业务路径检查用的模板
 ```
 
+模块五另外有一个**解析器级**的自检，不连服务、随时能跑（66 项）：
+
+```
+modules\logviz\selftest_parsers.py                    # 三个解析器的排版识别与归并（66 项）
+```
+
+两个数不一样，别混：`--module logviz` 的 20 项查的是**模块内核**（页面托管、
+资源逐字节、越界拒绝、源码白名单），`selftest_parsers.py` 的 66 项查的是
+**解析质量**（三种日志的排版变体、异常栈合并、指纹归一、TopN 排序）。前者要中台
+在跑，后者不需要。
+
 第 1~3 节与第 11 节是**与模块无关**的内核判据，任何模块都要过；
 第 4~10 节按模块给具体用例（opsgen / portal / filelist / logviz 各有一套，其它模块记为跳过）。
 

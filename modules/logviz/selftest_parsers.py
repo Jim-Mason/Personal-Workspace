@@ -396,6 +396,95 @@ if mrep["slowest"]:
 bogus = reachable("java", java_rows, jrep, "message", "<这个指纹不存在>", "message")
 check("不存在的 key 命中 0 行（判定不是恒真）", bogus == 0, f"命中 {bogus} 行")
 
+# ------------------------------------------------------------------ 排版变体
+#
+# 上面那些用例清一色用的是**方括号级别**的排版（`[INFO ] app.boot: msg`）。
+# 光靠它们会漏掉另一种同样常见、而且更主流的写法 —— Spring Boot 默认排版：
+#
+#     2026-09-18 14:03:11.100 ERROR 12345 --- [http-nio-8080-exec-1] c.c.OrderService : 下单失败 orderId=88213
+#                             └级别┘└PID┘         └────── 线程名 ──────┘ └─── logger ────┘ └─ 正文 ─┘
+#
+# 它的特点是**级别紧跟时间戳**，于是 PID / 线程 / logger 全都落在"级别之后那一段"里。
+# 实测这里出过一次真 bug：logger 与前缀一起被当成消息正文，消息榜上每条都拖着
+# `12345 --- [http-nio-8080-exec-1] c.c.OrderService : ` 这么一截噪音，
+# 而且同一件事来自不同线程时会被算成不同的消息。
+print()
+print("=" * 72)
+print(" 排版变体：Spring Boot（级别紧跟时间戳，前缀一整段都在级别之后）")
+print("=" * 72)
+
+sb_lines = [
+    "2026-09-18 14:03:11.100 ERROR 12345 --- [http-nio-8080-exec-1] c.c.OrderService : 下单失败 orderId=88213",
+    "2026-09-18 14:03:14.330 ERROR 12345 --- [http-nio-8080-exec-3] c.c.OrderService : 下单失败 orderId=99001",
+    "2026-09-18 14:03:12.220 WARN  12345 --- [http-nio-8080-exec-2] c.c.PayService : 支付回调延迟 1200ms",
+]
+
+head0 = java._head_parts(sb_lines[0])
+check("Spring Boot 排版能认出级别", bool(head0) and head0[0] == "ERROR",
+      f"级别={head0[0] if head0 else None}")
+check("Spring Boot 排版能抠出 logger（不带 PID 噪音）",
+      bool(head0) and head0[1] == "c.c.OrderService",
+      f"logger={head0[1]!r}（早先这里会是空，且 tail 以 PID 打头）")
+check("Spring Boot 排版能抠出线程名",
+      bool(head0) and head0[2] == "http-nio-8080-exec-1",
+      f"线程={head0[2]!r}")
+
+msg0 = java.message_of(sb_lines[0])
+check("Spring Boot 排版的正文不含 PID/线程/logger 前缀",
+      msg0 == "下单失败 orderId=88213",
+      f"正文={msg0!r}")
+
+# 这条是上面那个 bug 的**行为级**判据：两个不同 orderId 的同一类失败，
+# 必须归并成同一个指纹。修好之前它们带着线程名的指纹是分得开的。
+fp_a = common.fingerprint(java.message_of(sb_lines[0]), mode="lenient")
+fp_b = common.fingerprint(java.message_of(sb_lines[1]), mode="lenient")
+check("Spring Boot 排版下同一类失败归并成一个指纹", fp_a == fp_b and "<n>" in fp_a,
+      f"{fp_a!r} vs {fp_b!r}")
+check("Spring Boot 排版的指纹里没有线程名残留",
+      "http-nio" not in fp_a and "OrderService" not in fp_a,
+      f"指纹={fp_a!r}")
+
+# 另一条容易回归的：掰开 PID 段时**不能多切**。
+# 这行没有线程段，保守起来应当原样返回，绝不能把正文当噪音切掉。
+odd = "2026-09-18 14:03:11.100 ERROR 12345 --- 下单失败 orderId=88213"
+odd_msg = java.message_of(odd)
+check("前缀不完整时不误切正文",
+      odd_msg is not None and "下单失败" in odd_msg,
+      f"正文={odd_msg!r}")
+
+# ------------------------------------------------------------------ MySQL 的 # Schema 行
+#
+#     # Schema: chengyi_iot  Last_errno: 0  Killed: 0
+#
+# 库名只是**第一个词**。早先整行拿去当库名，于是同一个库会因为 Last_errno
+# 不同被拆成好几条，榜上出现的是 `chengyi_iot  Last_errno: 0  Killed: 0`。
+print()
+print("=" * 72)
+print(" MySQL：# Schema 行里只有第一个词是库名")
+print("=" * 72)
+
+schema_sample = """\
+# Time: 2026-09-18T14:03:12.500000+08:00
+# User@Host: iotuser[iotuser] @  [10.0.0.7]  Id:  8821
+# Schema: chengyi_iot  Last_errno: 0  Killed: 0
+# Query_time: 1.200000  Lock_time: 0.000142  Rows_sent: 12  Rows_examined: 100
+SET timestamp=1789723392;
+SELECT a FROM t WHERE id = 1;
+# Time: 2026-09-18T14:03:13.500000+08:00
+# User@Host: iotuser[iotuser] @  [10.0.0.9]  Id:  8822
+# Schema: chengyi_erp  Last_errno: 0  Killed: 0
+# Query_time: 0.900000  Lock_time: 0.000021  Rows_sent: 1  Rows_examined: 20
+SET timestamp=1789723393;
+SELECT b FROM u WHERE id = 2;
+"""
+schema_rows = [(i + 1, line) for i, line in enumerate(schema_sample.splitlines())]
+srep = mysql.parse(schema_rows)
+dbs = [d["db"] for d in srep["databases"]]
+check("库名只取 # Schema 的第一个词", dbs == ["chengyi_iot", "chengyi_erp"],
+      f"实际 {dbs}")
+check("库名里不含 Last_errno 之类的尾巴",
+      all("Last_errno" not in d for d in dbs), f"实际 {dbs}")
+
 # ------------------------------------------------------------------ 汇总
 print()
 print("=" * 72)
