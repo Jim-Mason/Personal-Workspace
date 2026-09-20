@@ -439,6 +439,31 @@ body {
   visibility: hidden;
 }
 
+/* 图标：知识库模式下才显示（书目录那套用章节编号，不需要图标）。
+   两种样式下三角与图标都保留占位，名字的起始位置因此不会左右跳。 */
+.fl-icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+}
+
+.fl-icon svg {
+  display: block;
+  width: 15px;
+  height: 15px;
+}
+
+.fl-icon.is-dir {
+  color: var(--fl-accent);
+}
+
+.fl-icon.is-file {
+  color: var(--fl-ink-faint);
+}
+
 .fl-num {
   font-family: var(--fl-mono);
   font-size: 12px;
@@ -539,6 +564,53 @@ body {
   font-size: 12px;
   color: var(--fl-danger);
   padding: 2px 8px 2px 30px;
+}
+
+/* ============================================================ 知识库树样式
+   只留「三角 + 图标 + 名字」，层级全靠缩进表达 —— 像一个知识库或 IDE 的侧栏。
+   这是默认样式。想看回带章节编号的「书目录」，把顶栏的「样式」切回去即可：
+   两套样式共用同一份 DOM，切换只是往 body 上加一个类，不重新请求数据。
+
+   ⚠️ 缩进是这套样式里层级**唯一**的表达方式（书目录那套靠 1 / 1.1 / 2.2.1
+      这种编号）。少了下面那条 padding-left，整棵树会拍平成一行行的平铺列表。 */
+body.is-toc .fl-icon {
+  display: none;
+}
+
+body.is-kb .fl-num,
+body.is-kb .fl-leader,
+body.is-kb .fl-meta,
+body.is-kb .fl-badge,
+body.is-kb .fl-actions {
+  display: none;
+}
+
+body.is-kb .fl-children {
+  padding-left: 17px;
+}
+
+/* 行松一点、间距小一点，读起来像目录树而不是表格 */
+body.is-kb .fl-row {
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+}
+
+body.is-kb .fl-name {
+  max-width: 62ch;
+}
+
+/* 「统计条目数」在知识库模式下没有可见效果，藏起来 ——
+   留着的话用户点了会以为坏了 */
+body.is-kb .fl-only-toc {
+  display: none;
+}
+
+/* 「正在读取…」「（空）」「读不了这一层」这些提示要对齐到名字那一列：
+   三角 12 + 间距 6 + 图标 16 + 间距 6 = 40 */
+body.is-kb .fl-note,
+body.is-kb .fl-error {
+  padding-left: 40px;
 }
 
 @media (max-width: 900px) {

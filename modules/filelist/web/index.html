@@ -26,7 +26,7 @@
           <input type="checkbox" id="fl-show-files" checked />
           显示文件
         </label>
-        <label class="fl-switch">
+        <label class="fl-switch fl-only-toc">
           <input type="checkbox" id="fl-counts" checked />
           统计条目数
         </label>
@@ -46,6 +46,16 @@
             <option value="mtime">按修改时间</option>
             <option value="size">按大小</option>
             <option value="kind">按类型</option>
+          </select>
+        </label>
+        <!-- 两种看法，看同一份目录：
+             「知识库树」= 三角 + 图标 + 名字，靠缩进看层级（默认，像知识库/IDE）；
+             「书目录」  = 章节编号 + 点线引导 + 条目数，像一本书的目录页。 -->
+        <label class="fl-field">
+          样式
+          <select id="fl-style">
+            <option value="kb">知识库树</option>
+            <option value="toc">书目录</option>
           </select>
         </label>
         <button type="button" class="fl-btn" id="fl-collapse">全部收起</button>

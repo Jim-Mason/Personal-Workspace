@@ -19,6 +19,30 @@
   var MOUNT = (window.__FL__ && window.__FL__.mount) || '/filelist';
   var API = MOUNT + '/api';
 
+  /* 两个图标用内联 SVG，不引外部文件（对应平台的「零网络上传、无遥测」）。
+     颜色交给 CSS 的 currentColor —— 既跟着主题走，也不用为深色模式各画一份。 */
+  var ICON_DIR =
+    '<svg viewBox="0 0 16 16" aria-hidden="true">' +
+    '<path d="M1.6 3.4A1.4 1.4 0 0 1 3 2h3.1c.37 0 .73.15 1 .42L8.2 3.5H13a1.4 1.4 0 0 1 1.4 1.4v7.7A1.4 1.4 0 0 1 13 14H3a1.4 1.4 0 0 1-1.4-1.4z" ' +
+    'fill="currentColor"/></svg>';
+  var ICON_FILE =
+    '<svg viewBox="0 0 16 16" aria-hidden="true">' +
+    '<path d="M4 1.6h4.7L13 5.9v8.5a.9.9 0 0 1-.9.9H4a.9.9 0 0 1-.9-.9V2.5a.9.9 0 0 1 .9-.9z" ' +
+    'fill="none" stroke="currentColor" stroke-width="1.25"/>' +
+    '<path d="M8.6 1.7V6h4.3" fill="none" stroke="currentColor" stroke-width="1.25"/></svg>';
+
+  var STYLE_KEY = 'fl.style';
+
+  /** 样式偏好存本地。隐私模式下 localStorage 读写都会抛，所以两边都要兜住 ——
+   *  这只是个看法偏好，绝不值得因为它让页面打不开。 */
+  function readStylePref() {
+    try {
+      return localStorage.getItem(STYLE_KEY) === 'toc' ? 'toc' : 'kb';
+    } catch (err) {
+      return 'kb';
+    }
+  }
+
   var state = {
     roots: [],
     rootId: '',
@@ -30,6 +54,8 @@
     depth: 2,
     sort: 'name',
     search: '',
+    // 'kb' = 知识库树（三角 + 图标 + 缩进）／ 'toc' = 书目录（章节编号 + 点线 + 条目数）
+    style: readStylePref(),
     // rel -> { open, loaded, childrenEl, size }
     nodes: {}
   };
@@ -63,6 +89,12 @@
   function count(n) {
     if (n == null) return '';
     return n >= 5000 ? '5000+' : n + ' 条';
+  }
+
+  /** 把当前样式落到 body 上：CSS 靠这个类决定显示「图标 + 缩进」还是「编号 + 点线」。 */
+  function applyStyle() {
+    document.body.classList.toggle('is-kb', state.style === 'kb');
+    document.body.classList.toggle('is-toc', state.style !== 'kb');
   }
 
   function request(path, options) {
@@ -317,8 +349,12 @@
       else if (!item.is_dir) meta = bytes(item.size);
       if (item.unreadable) meta = '读不了';
 
+      // 图标与编号都渲染出来，由 CSS 按当前样式决定显示哪一个 ——
+      // 于是换样式是纯视觉的事：不用重新请求数据、也不用重画整棵树。
       row.innerHTML =
         '<span class="fl-caret' + (item.is_dir ? '' : ' is-leaf') + '">▶</span>' +
+        '<span class="fl-icon ' + (item.is_dir ? 'is-dir' : 'is-file') + '">' +
+        (item.is_dir ? ICON_DIR : ICON_FILE) + '</span>' +
         '<span class="fl-num">' + (item.is_dir ? esc(num) : '·') + '</span>' +
         '<span class="fl-name" title="' + esc(item.name) + '">' + esc(item.name) + '</span>' +
         '<span class="fl-leader"></span>' +
@@ -471,6 +507,16 @@
       drawSheet();
     });
 
+    $('fl-style').addEventListener('change', function (event) {
+      state.style = event.target.value === 'toc' ? 'toc' : 'kb';
+      try {
+        localStorage.setItem(STYLE_KEY, state.style);
+      } catch (err) {
+        /* 隐私模式下写不了 —— 忽略，不该因为它打断使用 */
+      }
+      applyStyle();
+    });
+
     $('fl-collapse').addEventListener('click', collapseAll);
 
     $('fl-search').addEventListener('keydown', function (event) {
@@ -519,6 +565,8 @@
 
   window.addEventListener('DOMContentLoaded', function () {
     bind();
+    $('fl-style').value = state.style;
+    applyStyle();
     loadRoots(false).catch(function (err) {
       $('fl-empty').textContent = '读取书库失败：' + err.message;
     });
