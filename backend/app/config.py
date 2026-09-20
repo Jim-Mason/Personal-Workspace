@@ -10,7 +10,7 @@ from pathlib import Path
 # 对外品牌名只是「出厂默认值」，用户在界面里随时可改（存 meta 表）。
 # 真正的显示名以 branding 配置为准，这里这份只在配置为空时兜底。
 APP_NAME = "Personal Workspace"
-APP_VERSION = "0.5.0"
+APP_VERSION = "0.6.0"
 
 # 内部标识，不随品牌改名而变：
 # 令牌请求头 X-LocalDeck-Token、数据库文件名、目录名都用它。

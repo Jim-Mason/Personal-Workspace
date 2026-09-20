@@ -164,7 +164,11 @@ check("B 模块数量", "README 用词", f"应为「{claim_word}」", True, f"�
 # 「N 个模块」不一定是错的 —— 常见三种正当用法：
 #   其余/另外 N 个模块（说的是"除它以外的"）、N 个模块各有…（假设句）
 # 判据要把它们排除，否则每次都会误报。
-_BENIGN = ("其余", "另外", "剩下", "其它", "其他", "比如", "假如", "如果", "若", "例如")
+# 2026-09-20 补「只有 / 只需 / 仅有 / 唯独」：这三个词表示**在讲一个子集**，
+# 不是在声明中台一共有几个模块。当时写了「它真正能保护的只有两个模块」
+# （指的是 opsgen / portal），被判据当成了「中台有两个模块」而误报。
+_BENIGN = ("其余", "另外", "剩下", "其它", "其他", "比如", "假如", "如果", "若", "例如",
+           "只有", "只需", "仅有", "唯独")
 for rel, text in texts.items():
     for num, word in module_word.items():
         if num == len(ordered):
@@ -279,6 +283,49 @@ for rel, text in texts.items():
 # 有的模块本来就走 else 分支（它没有模块专属用例），那也是支持的一种。
 for mid, n in counts.items():
     check("C 自检参数", f"--module {mid} 能跑", "应产出项数", n > 0, f"实际 {n} 项")
+
+# 跨文档的「见 XXX.md 第X节」引用。这类引用在章节增删之后**不会报任何错**，
+# 它只会安静地把读者带到一个不存在的地方 —— 2026-09-20 就抓到一处：
+# MODULES.md 指向 ARCHITECTURE.md 第七节，而那份文档只有六节。
+# 顺带一提，同文档内的「见第三节」不在检查范围内：那种改章节时一般会一起改，
+# 而"第一节到第三节"这种范围写法容易误报。
+_CN_NUM = {
+    "一": 1, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7,
+    "八": 8, "九": 9, "十": 10, "十一": 11, "十二": 12, "十三": 13,
+}
+
+
+def _section_numbers(rel: str) -> list[int]:
+    """某个文档里**实际存在**的二级章节编号（「## 三、…」→ 3）。"""
+    nums = []
+    for line in texts.get(rel, "").splitlines():
+        m = re.match(r"##\s*([一二三四五六七八九十]+)、", line)
+        if m and _CN_NUM.get(m.group(1)):
+            nums.append(_CN_NUM[m.group(1)])
+    return sorted(nums)
+
+
+for rel, text in texts.items():
+    # 两种写法都要认：`[ARCHITECTURE.md](ARCHITECTURE.md) 第四节`
+    # 与 见 `docs/MODULES.md` 第十二节
+    for m in re.finditer(
+        r"(?:\[[\w.]+\.md\]\(([^)]*\.md)[^)]*\)|`((?:docs/)?[\w.]+\.md)`)"
+        r"\s*第([一二三四五六七八九十]+)节",
+        text,
+    ):
+        raw = m.group(1) or m.group(2) or ""
+        num = _CN_NUM.get(m.group(3))
+        cand = raw if raw.startswith("docs/") else f"docs/{raw}"
+        target_rel = cand if cand in texts else (raw if raw in texts else "")
+        if not target_rel or num is None:
+            continue
+        have = _section_numbers(target_rel)
+        check(
+            "C 章节引用",
+            f"{rel} → {target_rel} 第{m.group(3)}节",
+            f"该文档应有这一节（现有 {have}）",
+            num in have,
+        )
 
 # ---------------------------------------------------------------- 输出
 print("=" * 96)

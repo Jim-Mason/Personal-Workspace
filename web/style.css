@@ -198,7 +198,11 @@ html[data-bg="plain"] .bg-veil { opacity: 1; }
 .topbar {
   position: sticky;
   top: 0;
-  z-index: 20;
+  /* 要压过模块运行区（60）。理由：模块切换器的下拉菜单是从顶栏往下伸出去的，
+     顶栏若在下层，菜单会被 iframe 整块盖住 —— 现象是「点了没反应」，很难查。
+     又必须低于外观抽屉（67）与弹窗（80）：那两样要盖住包括顶栏在内的一切。
+     这四层（顶栏 65 / 抽屉 67 / 弹窗 80 / 登录门 90）是一组，动其中一层要看另三层。 */
+  z-index: 65;
   display: flex;
   align-items: center;
   gap: 22px;
@@ -860,7 +864,7 @@ td.col-time { font-family: var(--mono); font-size: 12px; color: var(--text-2); w
    刻意做成"盖住内容区"而不是像 toast 那样飘一条：它不是一次性反馈，
    而是一个挡住所有数据的状态 —— 消失掉反而会让人以为已经好了。 */
 /* ================================================================ 登录门 */
-/* z-index 要压过所有东西：抽屉(40)、模块运行区、弹窗(60)。
+/* z-index 要压过所有东西：顶栏(65)、抽屉(67)、模块运行区(60)、弹窗(80)。
    否则未登录时还能点到下面的按钮，而那些点击注定 401 —— 看着像坏了。 */
 .gate {
   position: fixed;
@@ -961,7 +965,8 @@ td.col-time { font-family: var(--mono); font-size: 12px; color: var(--text-2); w
 .drawer-mask {
   position: fixed;
   inset: 0;
-  z-index: 40;
+  /* 要盖住顶栏（65）—— 抽屉打开时顶栏也该跟着变暗、不可点 */
+  z-index: 66;
   background: color-mix(in srgb, #000 34%, transparent);
   -webkit-backdrop-filter: blur(2px);
   backdrop-filter: blur(2px);
@@ -972,7 +977,8 @@ td.col-time { font-family: var(--mono); font-size: 12px; color: var(--text-2); w
 .drawer {
   position: fixed;
   top: 0; right: 0; bottom: 0;
-  z-index: 50;
+  /* 紧贴遮罩之上、弹窗（80）之下 */
+  z-index: 67;
   display: flex;
   flex-direction: column;
   width: 392px;
@@ -1243,8 +1249,9 @@ td.col-time { font-family: var(--mono); font-size: 12px; color: var(--text-2); w
 .module-acts .spacer { flex: 1 1 0; }
 
 /* ============================================================ 模块运行区
-   顶栏留着不遮 —— 用户随时能点回中台别的标签页。
-   模块自己的导航条暂时还在里面（统一导航是下一阶段的事）。 */
+   顶栏留着不遮 —— 模块页用的就是中台那条 topbar，用户随时能点回别的标签页。
+   模块自己的操作（刷新 / 日志 / 新窗口）与模块切换都收在 topbar 右侧那个
+   切换器里，所以这里只剩一个 iframe。 */
 .runner {
   position: fixed;
   top: var(--topbar-h);
@@ -1256,22 +1263,106 @@ td.col-time { font-family: var(--mono); font-size: 12px; color: var(--text-2); w
   flex-direction: column;
   background: var(--bg);
 }
-.runner-bar {
-  flex: 0 0 auto;
+.runner-frame { flex: 1 1 auto; width: 100%; border: 0; background: var(--surface); }
+
+/* ========================================================== 模块切换器
+   只在模块模式下出现（body.is-module）。中台自己的「卡片/表格」「扫描本机」
+   在模块页里没有意义，先藏起来腾地方 —— 顶栏因此始终只有一条，
+   不再看着像两个系统拼在一起。 */
+body.is-module #local-pill,
+body.is-module #view-switch,
+body.is-module #btn-scan { display: none; }
+
+.modbar { position: relative; }
+.modbar-pick {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 9px 18px;
-  border-bottom: 1px solid var(--border);
-  background: var(--glass);
-  -webkit-backdrop-filter: blur(14px);
-  backdrop-filter: blur(14px);
+  gap: 8px;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
 }
-.runner-bar .state-dot { margin-top: 0; }
-.runner-title { font-size: 13px; font-weight: 650; }
-.runner-sub { font-size: 11.5px; color: var(--text-3); font-family: var(--mono); }
-.runner-bar .spacer { flex: 1 1 0; }
-.runner-frame { flex: 1 1 auto; width: 100%; border: 0; background: var(--surface); }
+.modbar-pick:hover { border-color: var(--border-strong); }
+.modbar-pick[aria-expanded="true"] {
+  border-color: var(--accent-border);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.modbar-pick .state-dot { margin-top: 0; }
+.modbar-name { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.modbar-chev {
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid var(--text-3);
+}
+.modbar-pick[aria-expanded="true"] .modbar-chev { border-top-color: var(--accent); }
+
+.modbar-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 272px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-2);
+  z-index: 80;
+}
+.modbar-sub {
+  margin: 0 0 8px;
+  padding: 0 8px;
+  font-size: 11.5px;
+  color: var(--text-3);
+  font-family: var(--mono);
+}
+.modbar-acts { display: flex; gap: 6px; padding: 0 4px 8px; }
+.modbar-sep { height: 1px; margin: 2px 4px 8px; background: var(--border); }
+.modbar-list { display: flex; flex-direction: column; gap: 2px; }
+.modbar-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.modbar-item:hover { background: var(--surface-2); }
+.modbar-item.is-current { background: var(--accent-soft); color: var(--accent); font-weight: 650; }
+.modbar-item:disabled { opacity: 0.5; cursor: not-allowed; }
+.modbar-item:disabled:hover { background: transparent; }
+.modbar-item .state-dot { margin-top: 0; }
+.modbar-item-name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.modbar-back {
+  display: block;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.modbar-back:hover { background: var(--surface-2); }
 
 /* ============================================================ 模块日志弹窗 */
 .modal-mask {

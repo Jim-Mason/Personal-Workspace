@@ -50,6 +50,31 @@
     <button type="button" class="btn btn-ghost btn-sm" id="btn-logout"
             title="注销这台浏览器上的会话，下次打开需重新输令牌">退出</button>
     <button type="button" class="btn btn-primary" id="btn-scan">扫描本机</button>
+
+    <!-- 模块模式专用：模块切换器。
+         模块页里「卡片/表格」「扫描本机」都没有意义，由 body.is-module 把它们藏起来，
+         这里换上「当前模块 + 一键切换」—— 有了它，换模块不必先退回列表再点一次。
+         里面的 id 沿用原来的 runner-*，所以状态轮询那套逻辑一行都不用改。 -->
+    <div class="modbar" id="module-bar" hidden>
+      <button type="button" class="modbar-pick" id="module-pick"
+              aria-haspopup="menu" aria-expanded="false" aria-controls="module-menu">
+        <span class="state-dot" id="runner-dot"></span>
+        <span class="modbar-name" id="runner-title">模块</span>
+        <span class="modbar-chev" aria-hidden="true"></span>
+      </button>
+      <div class="modbar-menu" id="module-menu" role="menu" hidden>
+        <p class="modbar-sub" id="runner-sub"></p>
+        <div class="modbar-acts">
+          <button type="button" class="btn btn-sm btn-ghost" id="runner-reload">刷新</button>
+          <button type="button" class="btn btn-sm btn-ghost" id="runner-log">日志</button>
+          <button type="button" class="btn btn-sm btn-ghost" id="runner-external">新窗口</button>
+        </div>
+        <div class="modbar-sep"></div>
+        <div class="modbar-list" id="module-switch-list"></div>
+        <div class="modbar-sep"></div>
+        <button type="button" class="modbar-back" id="runner-back">← 返回模块列表</button>
+      </div>
+    </div>
   </div>
 </header>
 
@@ -266,19 +291,23 @@
   </div>
 </aside>
 
-<!-- ------------------------------------------------- 模块运行区（iframe） -->
+<!-- ------------------------------------------------- 模块运行区（iframe）
+     顶栏不在这里 —— 模块页用的就是中台那条共用的 topbar，只是右侧换成了模块切换器。
+     原先这里自带一条 runner-bar，「返回中台」和 topbar 的「模块」标签做的是同一件事，
+     两行导航叠在一起，界面看着像两个系统拼起来的。现在合并成一条。 -->
 <div class="runner" id="runner" hidden>
-  <div class="runner-bar">
-    <button type="button" class="btn btn-sm btn-ghost" id="runner-back">← 返回中台</button>
-    <span class="state-dot" id="runner-dot"></span>
-    <span class="runner-title" id="runner-title">模块</span>
-    <span class="runner-sub" id="runner-sub"></span>
-    <span class="spacer"></span>
-    <button type="button" class="btn btn-sm btn-ghost" id="runner-reload">刷新</button>
-    <button type="button" class="btn btn-sm btn-ghost" id="runner-log">日志</button>
-    <button type="button" class="btn btn-sm btn-ghost" id="runner-external">新窗口打开</button>
-  </div>
-  <iframe id="runner-frame" class="runner-frame" title="模块内容" referrerpolicy="no-referrer"></iframe>
+  <!-- 模块内容。这两个属性是刻意加的：
+       · allow="clipboard-write" —— 把浏览器能力收紧到只剩「复制」。
+         allow 是白名单，没列出来的（摄像头、麦克风、定位、传感器、USB…）一律拒绝。
+         模块是跑在本机的第三方代码，不该假定它需要这些能力。
+       · referrerpolicy="no-referrer" —— 别把中台地址带进出站请求。
+       **刻意不加 sandbox**：模块要用自己的 Cookie 换票据、要跑自己的脚本，
+       去掉 allow-scripts 或 allow-same-origin 会让它直接打不开；
+       两个都给又等于没隔离（浏览器官方文档也这么讲）。
+       真要跨源隔离得靠另一条回环端口的「来源隔离」，
+       决策与代价见 docs/ARCHITECTURE.md 第四节。 -->
+  <iframe id="runner-frame" class="runner-frame" title="模块内容"
+          referrerpolicy="no-referrer" allow="clipboard-write"></iframe>
 </div>
 
 <!-- ------------------------------------------------------- 模块日志弹窗 -->

@@ -909,6 +909,15 @@
     $('runner-dot').className = 'state-dot is-' + (MODULE_STATE[item.state] ? item.state : 'stopped');
     $('runner-frame').src = item.open_url;
     $('runner').hidden = false;
+
+    // 模块模式：顶栏右侧换成模块切换器。
+    // 状态挂在 body 的类上而不是散在各处 —— 「当前是不是模块模式」只有一个真值来源，
+    // CSS 也靠它把中台专用的那几个控件藏掉。
+    document.body.classList.add('is-module');
+    $('module-bar').hidden = false;
+    renderModuleSwitch();
+    closeModuleMenu();
+    syncModuleUrl(id);
   }
 
   function closeRunner() {
@@ -917,6 +926,68 @@
     // 先把 src 清掉再隐藏：否则 iframe 里的定时器/轮询会继续跑
     $('runner-frame').src = 'about:blank';
     $('runner').hidden = true;
+    document.body.classList.remove('is-module');
+    $('module-bar').hidden = true;
+    closeModuleMenu();
+    syncModuleUrl(null);
+  }
+
+  /* --------------------------------------------------------- 模块切换器 */
+  /** 切换列表：只列真的挂载了的模块；没就绪的置灰并说明原因。
+   *  有它才不用「先退回列表、再点一次卡片」——那是原先换模块的唯一路径。 */
+  function renderModuleSwitch() {
+    var host = $('module-switch-list');
+    if (!host) return;
+    host.innerHTML = state.modules.filter(function (m) {
+      return !!m.mount;
+    }).map(function (m) {
+      var cls = 'modbar-item';
+      if (m.id === state.openModuleId) cls += ' is-current';
+      var dot = '<span class="state-dot is-' +
+        (MODULE_STATE[m.state] ? m.state : 'stopped') + '"></span>';
+      var mark = m.id === state.openModuleId
+        ? '<span class="modbar-item-mark">当前</span>'
+        : '';
+      return '<button type="button" class="' + cls + '" data-module="' + escapeHtml(m.id) + '"' +
+        (m.proxy_ready ? '' : ' disabled title="' + escapeHtml(moduleStateText(m)) + '"') +
+        '>' + dot + '<span class="modbar-item-name">' + escapeHtml(m.name) + '</span>' +
+        mark + '</button>';
+    }).join('');
+  }
+
+  function openModuleMenu() {
+    $('module-menu').hidden = false;
+    $('module-pick').setAttribute('aria-expanded', 'true');
+  }
+
+  function closeModuleMenu() {
+    var menu = $('module-menu');
+    if (!menu || menu.hidden) return;
+    menu.hidden = true;
+    $('module-pick').setAttribute('aria-expanded', 'false');
+  }
+
+  function toggleModuleMenu() {
+    if ($('module-menu').hidden) {
+      renderModuleSwitch();
+      openModuleMenu();
+    } else {
+      closeModuleMenu();
+    }
+  }
+
+  /** 把当前模块写进地址栏。
+   *  iframe 内部的跳转不会改父页面地址，不写的话一刷新就掉回模块列表。
+   *  只动 module 这一个参数，别把别处刚设好的参数冲掉。 */
+  function syncModuleUrl(id) {
+    var params = new URLSearchParams(location.search);
+    if (id) {
+      params.set('module', id);
+    } else {
+      params.delete('module');
+    }
+    var qs = params.toString();
+    history.replaceState(null, '', location.pathname + (qs ? '?' + qs : '') + location.hash);
   }
 
   function moduleAction(id, act) {
@@ -1398,7 +1469,36 @@
 
     $('btn-modules-reload').addEventListener('click', reloadModules);
 
-    $('runner-back').addEventListener('click', closeRunner);
+    // 「返回模块列表」= 收起运行区 + 回到模块面板。
+    // 只 closeRunner 也能用（面板本来就停在 modules），但用 ?module= 深链接直接
+    // 进来的情况下显式切一下更稳。
+    $('runner-back').addEventListener('click', function () {
+      closeRunner();
+      gotoPanel('modules');
+    });
+
+    // ---- 模块切换器（顶栏右侧）----
+    $('module-pick').addEventListener('click', function (event) {
+      // 阻止冒泡：否则会被下面那个「点菜单外就收起」当场关掉
+      event.stopPropagation();
+      toggleModuleMenu();
+    });
+    $('module-switch-list').addEventListener('click', function (event) {
+      var btn = event.target.closest('[data-module]');
+      if (!btn || btn.disabled) return;
+      var id = btn.dataset.module;
+      closeModuleMenu();
+      if (id !== state.openModuleId) openModule(id);
+    });
+    // 点菜单以外的地方、或按 Esc，都收起来
+    document.addEventListener('click', function (event) {
+      var t = event.target;
+      if (t && t.closest && !t.closest('#module-bar')) closeModuleMenu();
+    });
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape') closeModuleMenu();
+    });
+
     $('runner-reload').addEventListener('click', function () {
       if (state.openModuleId === null) return;
       var frame = $('runner-frame');

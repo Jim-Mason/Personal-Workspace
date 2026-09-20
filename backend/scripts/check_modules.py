@@ -696,11 +696,26 @@ def main() -> int:
             f"HTTP {status} / {len(items or [])} 个目录",
         )
 
-        root_id = (items or [{}])[0].get("id", "") if items else ""
+        # 挑一个**真的列得出来**的目录，而不是盲取第一个。
+        # 理由：登记列表里可能留着已经失效的条目（目录被移走或删掉了），
+        # 盲取第一个就会拿到 404，于是「列一层日志文件」假报失败 ——
+        # 2026-09-20 在真实实例上撞到过：第一条登记指向一个早已删掉的临时目录。
+        # 这条判据要测的是「模块能不能列目录」，不是「第一条登记还在不在」。
+        root_id = ""
+        for cand in (items or []):
+            cid = cand.get("id", "")
+            if not cid:
+                continue
+            code, _, _ = request(base, f"{mount}/api/list?root={cid}&path=", cookie=cookie)
+            if code == 200:
+                root_id = cid
+                break
+
         if not root_id:
-            record(SKIP, "列一层日志文件", "还没有登记日志目录，无法继续")
-            record(SKIP, "日志类型探测", "还没有登记日志目录，无法继续")
-            record(SKIP, "越界路径一律被拒", "还没有登记日志目录，无法继续")
+            why = "还没有登记日志目录，无法继续" if not items else "登记的目录都打不开，无法继续"
+            record(SKIP, "列一层日志文件", why)
+            record(SKIP, "日志类型探测", why)
+            record(SKIP, "越界路径一律被拒", why)
         else:
             status, _, body = request(
                 base, f"{mount}/api/list?root={root_id}&path=", cookie=cookie
